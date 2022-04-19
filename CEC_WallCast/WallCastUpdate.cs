@@ -40,7 +40,7 @@ namespace CEC_WallCast
 
                 //找到所有穿牆套管元件
                 List<FamilyInstance> famList = findTargetElements(doc);
-                List<string> usefulParaName = new List<string> { "BTOP", "BCOP", "BBOP", "TTOP", "TCOP", "TBOP",
+                List<string> usefulParaName = new List<string> { "開口長","BTOP", "BCOP", "BBOP", "TTOP", "TCOP", "TBOP",
                     "干涉管數量", "系統別","【原則檢討】是否穿牆"};
                 //檢查參數
                 foreach (FamilyInstance famInst in famList)
@@ -91,7 +91,7 @@ namespace CEC_WallCast
             }
             sw.Stop();//碼錶停止
             double sec = Math.Round(sw.Elapsed.TotalMilliseconds / 1000, 2);
-            string output = $"套管資訊更新完成，共花費 {sec} 秒\n";
+            string output = $"穿牆套管資訊更新完成，共花費 {sec} 秒\n";
             MessageBox.Show(output + errorOutput);
             return Result.Succeeded;
         }
@@ -199,7 +199,6 @@ namespace CEC_WallCast
         }
         public List<FamilyInstance> findTargetElements(Document doc)
         {
-            //RC套管跟SC開口的內部名稱是不同的
             string internalName = "CEC-穿牆";
             List<FamilyInstance> castInstances = new List<FamilyInstance>();
             try
@@ -319,6 +318,12 @@ namespace CEC_WallCast
             }
             return castWallDict;
         }
+                public double sortLevelbyHeight(Element element)
+        {
+            Level tempLevel = element as Level;
+            double levelHeight = element.LookupParameter("立面").AsDouble();
+            return levelHeight;
+        }
         public Element updateCastWithWall(Element elem, Element linkedWall)
         {
             FamilyInstance updateCast = null;
@@ -327,10 +332,22 @@ namespace CEC_WallCast
                 FamilyInstance inst = elem as FamilyInstance;
                 Document document = elem.Document;
                 Wall wall = linkedWall as Wall;
-
+                Level level = document.GetElement(elem.LevelId) as Level;
                 //調整高度與長度
-                double castDiameter = inst.Symbol.LookupParameter("管外直徑").AsDouble() / 2;
-                double castHeight = inst.LookupParameter("偏移").AsDouble() - castDiameter; //COP
+                string internalCastName = inst.Symbol.LookupParameter("API識別名稱").AsString();
+                bool isCircleCast = internalCastName.Contains("圓");
+                double outterDiameter = 0;
+                double castDiameter = 0;
+                if (!isCircleCast)
+                {
+                    outterDiameter = inst.LookupParameter("開口高").AsDouble();
+                    castDiameter = outterDiameter/2;
+                }else if (isCircleCast)
+                {
+                    outterDiameter = inst.Symbol.LookupParameter("管外直徑").AsDouble();
+                    castDiameter = outterDiameter / 2;
+                }
+                double castHeight = inst.LookupParameter("偏移").AsDouble() + castDiameter; //COP
 
                 //設定BBOP、BCOP、BTOP (牆只需要設定從底部開始的參數)
                 Parameter BBOP = inst.LookupParameter("BBOP");
@@ -339,15 +356,48 @@ namespace CEC_WallCast
                 Parameter TTOP = inst.LookupParameter("TTOP");
                 Parameter TCOP = inst.LookupParameter("TCOP");
                 Parameter TBOP = inst.LookupParameter("TBOP");
-                double outterDiameter = inst.Symbol.LookupParameter("管外直徑").AsDouble();
                 double wallBaseOffset = wall.get_Parameter(BuiltInParameter.WALL_BASE_OFFSET).AsDouble();
-                double BBOP_toSet = castHeight - wallBaseOffset - outterDiameter / 2;
-                double BCOP_toSet = castHeight - wallBaseOffset;
-                double BTOP_toSet = castHeight - wallBaseOffset + outterDiameter / 2;
                 double wallHeight = wall.get_Parameter(BuiltInParameter.WALL_USER_HEIGHT_PARAM).AsDouble();
-                double TCOP_toSet = wallHeight - BCOP_toSet;
-                double TBOP_toSet = TCOP_toSet + outterDiameter / 2;
-                double TTOP_toSet = TCOP_toSet - outterDiameter / 2;
+                //設定值計算，後來修正成只要用FL計算即可
+                //抓到模型中所有的樓層元素，依照樓高排序。要找到位於他上方的樓層
+                FilteredElementCollector levelCollector = new FilteredElementCollector(document);
+                ElementFilter level_Filter = new ElementCategoryFilter(BuiltInCategory.OST_Levels);
+                levelCollector.WherePasses(level_Filter).WhereElementIsNotElementType().ToElements();
+                List<string> levelNames = new List<string>(); //用名字來確認篩選排序
+                List<Element> level_List = levelCollector.OrderBy(x => sortLevelbyHeight(x)).ToList();
+                for (int i = 0; i < level_List.Count(); i++)
+                {
+                    Level le = level_List[i] as Level;
+                    levelNames.Add(le.Name);
+                }
+                int index_lowLevel = levelNames.IndexOf(level.Name);
+                int index_topLevel = index_lowLevel + 1;
+                Level topLevel = null;
+                if (index_topLevel < level_List.Count())
+                {
+                    topLevel = level_List[index_topLevel] as Level;
+                }
+                else if (topLevel == null)
+                {
+                    MessageBox.Show("管的上方沒有樓層，無法計算穿牆套管偏移植");
+                }
+                //後來改成以基準樓層計算偏移值
+                double basicWallHeight = topLevel.Elevation - level.Elevation;
+                double BBOP_toSet = castHeight  - outterDiameter/2;
+                double BCOP_toSet = castHeight;
+                double BTOP_toSet = castHeight + outterDiameter / 2;
+                double TCOP_toSet = basicWallHeight - BCOP_toSet;
+                double TBOP_toSet = TCOP_toSet + outterDiameter/2;
+                double TTOP_toSet = TCOP_toSet - outterDiameter/2 ;
+
+                #region 原版，可以計算升降板的距離
+                //double BBOP_toSet = castHeight - wallBaseOffset - outterDiameter/2;
+                //double BCOP_toSet = castHeight - wallBaseOffset ;
+                //double BTOP_toSet = castHeight - wallBaseOffset + outterDiameter / 2;
+                //double TCOP_toSet = wallHeight - BCOP_toSet;
+                //double TBOP_toSet = TCOP_toSet + outterDiameter/2;
+                //double TTOP_toSet = TCOP_toSet - outterDiameter/2 ;
+                #endregion
                 BBOP.Set(BBOP_toSet);
                 BCOP.Set(BCOP_toSet);
                 BTOP.Set(BTOP_toSet);
@@ -593,7 +643,7 @@ namespace CEC_WallCast
                 XYZ positionChange = targetPoint - castPt;
                 double castLength = UnitUtils.ConvertFromInternalUnits(wall.Width, unitType) + 20;
                 double castLength_toSet = UnitUtils.ConvertToInternalUnits(castLength ,unitType);
-                Parameter instLenPara = inst.LookupParameter("L");
+                Parameter instLenPara = inst.LookupParameter("開口長");
 
                 //先調整位置
                 if (!castPt.IsAlmostEqualTo(targetPoint))
@@ -601,7 +651,7 @@ namespace CEC_WallCast
                     ElementTransformUtils.MoveElement(document, inst.Id, positionChange);
                 }
                 //在調整長度
-                if (instLenPara.AsDouble() < wall.Width)
+                if (instLenPara.AsDouble() <= wall.Width)
                 {
                     instLenPara.Set(castLength_toSet);
                 }

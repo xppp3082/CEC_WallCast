@@ -58,7 +58,7 @@ namespace CEC_WallCast
                     XYZ HoleLocation = GetHoleLocation(linkedWall, pickPipe, linkTransform);
                     if (HoleLocation == null)
                     {
-                        MessageBox.Show("選中的管並未和牆交集");
+                        MessageBox.Show("管沒有和任何的牆交集，請重新調整!");
                     }
 
                     Family Wall_Cast;
@@ -73,60 +73,95 @@ namespace CEC_WallCast
                     using (Transaction trans = new Transaction(doc))
                     {
                         trans.Start("放置穿樑套管");
-                        FamilySymbol CastSymbol2 = new WallCast().findWall_CastSymbol(doc, Wall_Cast, pickPipe);
-                        instance = doc.Create.NewFamilyInstance(HoleLocation, CastSymbol2, level, StructuralType.NonStructural);
-                        //參數檢查
-                        List<string> paraNameToCheck = new List<string>()
+                        if (HoleLocation != null)
+                        {
+                            FamilySymbol CastSymbol2 = new WallCast().findWall_CastSymbol(doc, Wall_Cast, pickPipe);
+                            instance = doc.Create.NewFamilyInstance(HoleLocation, CastSymbol2, level, StructuralType.NonStructural);
+                            //參數檢查
+                            List<string> paraNameToCheck = new List<string>()
                                 {
-                                   "L","系統別","TTOP","TCOP","TBOP","BBOP","BCOP","BTOP"
+                                   "開口長","系統別","TTOP","TCOP","TBOP","BBOP","BCOP","BTOP"
                                 };
 
-                        foreach (string item in paraNameToCheck)
-                        {
-                            if (!checkPara(instance, item))
+                            foreach (string item in paraNameToCheck)
                             {
-                                MessageBox.Show($"執行失敗，請檢查{instance.Symbol.FamilyName}元件中是否缺少{item}參數欄位");
+                                if (!checkPara(instance, item))
+                                {
+                                    MessageBox.Show($"執行失敗，請檢查 {instance.Symbol.FamilyName} 元件中是否缺少 {item} 參數欄位");
+                                    return Result.Failed;
+                                }
+                            }
+
+                            //調整高度與長度
+                            double castDiameter = instance.Symbol.LookupParameter("管外直徑").AsDouble() / 2;
+                            double pipeHeight = pickPipe.LookupParameter("偏移").AsDouble();
+                            instance.LookupParameter("偏移").Set(pipeHeight - castDiameter);
+                            double castLength = UnitUtils.ConvertToInternalUnits(holeLength, unitType);
+                            instance.LookupParameter("開口長").Set(castLength);
+                            LocationPoint loPoint = instance.Location as LocationPoint;
+                            XYZ newPoint = new XYZ(HoleLocation.X, HoleLocation.Y, HoleLocation.Z + 10);
+                            Line axis = Line.CreateBound(HoleLocation, newPoint);
+                            loPoint.Rotate(axis, angle);
+
+
+                            //設定BBOP、BCOP、BTOP (牆只需要設定從底部開始的參數)
+                            Parameter BBOP = instance.LookupParameter("BBOP");
+                            Parameter BCOP = instance.LookupParameter("BCOP");
+                            Parameter BTOP = instance.LookupParameter("BTOP");
+                            Parameter TTOP = instance.LookupParameter("TTOP");
+                            Parameter TCOP = instance.LookupParameter("TCOP");
+                            Parameter TBOP = instance.LookupParameter("TBOP");
+                            double outterDiameter = instance.Symbol.LookupParameter("管外直徑").AsDouble();
+                            double wallBaseOffset = wall.get_Parameter(BuiltInParameter.WALL_BASE_OFFSET).AsDouble();
+                            double wallHeight = wall.get_Parameter(BuiltInParameter.WALL_USER_HEIGHT_PARAM).AsDouble();
+                            //設定值計算，後來修正成只要用FL計算即可
+                            //抓到模型中所有的樓層元素，依照樓高排序。要找到位於他上方的樓層
+                            FilteredElementCollector levelCollector = new FilteredElementCollector(doc);
+                            ElementFilter level_Filter = new ElementCategoryFilter(BuiltInCategory.OST_Levels);
+                            levelCollector.WherePasses(level_Filter).WhereElementIsNotElementType().ToElements();
+                            List<string> levelNames = new List<string>(); //用名字來確認篩選排序
+                            List<Element> level_List = levelCollector.OrderBy(x => sortLevelbyHeight(x)).ToList();
+                            for (int i = 0; i < level_List.Count(); i++)
+                            {
+                                Level le = level_List[i] as Level;
+                                levelNames.Add(le.Name);
+                            }
+                            int index_lowLevel = levelNames.IndexOf(level.Name);
+                            int index_topLevel = index_lowLevel + 1;
+                            Level topLevel = null;
+                            if (index_topLevel < level_List.Count())
+                            {
+                                topLevel = level_List[index_topLevel] as Level;
+                            }
+                            else if (topLevel == null)
+                            {
+                                message = "管的上方沒有樓層，無法計算穿牆套管偏移值";
                                 return Result.Failed;
                             }
+                            double basicWallHeight = topLevel.Elevation - level.Elevation;
+                            double BBOP_toSet = pipeHeight - outterDiameter / 2;
+                            double BCOP_toSet = pipeHeight;
+                            double BTOP_toSet = pipeHeight+ outterDiameter / 2;
+                            double TCOP_toSet = basicWallHeight - BCOP_toSet;
+                            double TBOP_toSet = TCOP_toSet + outterDiameter / 2;
+                            double TTOP_toSet = TCOP_toSet - outterDiameter / 2;
+                            #region 早期算法，連同降板一起計算
+                            //double BBOP_toSet = pipeHeight - wallBaseOffset - outterDiameter / 2;
+                            //double BCOP_toSet = pipeHeight - wallBaseOffset;
+                            //double BTOP_toSet = pipeHeight - wallBaseOffset + outterDiameter / 2;
+                            //double TCOP_toSet = wallHeight - BCOP_toSet;
+                            //double TBOP_toSet = TCOP_toSet + outterDiameter / 2;
+                            //double TTOP_toSet = TCOP_toSet - outterDiameter / 2;
+                            #endregion
+                            BBOP.Set(BBOP_toSet);
+                            BCOP.Set(BCOP_toSet);
+                            BTOP.Set(BTOP_toSet);
+                            TBOP.Set(TBOP_toSet);
+                            TCOP.Set(TCOP_toSet);
+                            TTOP.Set(TTOP_toSet);
                         }
-
-                        //調整高度與長度
-                        double castDiameter = instance.Symbol.LookupParameter("管外直徑").AsDouble() / 2;
-                        double pipeHeight = pickPipe.LookupParameter("偏移").AsDouble();
-                        instance.LookupParameter("偏移").Set(pipeHeight + castDiameter);
-                        double castLength = UnitUtils.ConvertToInternalUnits(holeLength, unitType);
-                        instance.LookupParameter("L").Set(castLength);
-                        LocationPoint loPoint = instance.Location as LocationPoint;
-                        XYZ newPoint = new XYZ(HoleLocation.X, HoleLocation.Y, HoleLocation.Z + 10);
-                        Line axis = Line.CreateBound(HoleLocation, newPoint);
-                        loPoint.Rotate(axis, angle);
-
-
-                        //設定BBOP、BCOP、BTOP (牆只需要設定從底部開始的參數)
-                        Parameter BBOP = instance.LookupParameter("BBOP");
-                        Parameter BCOP = instance.LookupParameter("BCOP");
-                        Parameter BTOP = instance.LookupParameter("BTOP");
-                        Parameter TTOP = instance.LookupParameter("TTOP");
-                        Parameter TCOP = instance.LookupParameter("TCOP");
-                        Parameter TBOP = instance.LookupParameter("TBOP");
-                        double outterDiameter = instance.Symbol.LookupParameter("管外直徑").AsDouble();
-                        double wallBaseOffset = wall.get_Parameter(BuiltInParameter.WALL_BASE_OFFSET).AsDouble();
-                        double BBOP_toSet = pipeHeight - wallBaseOffset - outterDiameter / 2;
-                        double BCOP_toSet = pipeHeight - wallBaseOffset;
-                        double BTOP_toSet = pipeHeight - wallBaseOffset + outterDiameter / 2;
-                        double wallHeight = wall.get_Parameter(BuiltInParameter.WALL_USER_HEIGHT_PARAM).AsDouble();
-                        double TCOP_toSet = wallHeight - BCOP_toSet;
-                        double TBOP_toSet = TCOP_toSet + outterDiameter / 2;
-                        double TTOP_toSet = TCOP_toSet - outterDiameter / 2;
-                        BBOP.Set(BBOP_toSet);
-                        BCOP.Set(BCOP_toSet);
-                        BTOP.Set(BTOP_toSet);
-                        TBOP.Set(TBOP_toSet);
-                        TCOP.Set(TCOP_toSet);
-                        TTOP.Set(TTOP_toSet);
                         trans.Commit();
                     }
-
                 }
                 catch
                 {
@@ -151,6 +186,12 @@ namespace CEC_WallCast
             return result;
         }
 
+        public double sortLevelbyHeight(Element element)
+        {
+            Level tempLevel = element as Level;
+            double levelHeight = element.LookupParameter("立面").AsDouble();
+            return levelHeight;
+        }
         public Solid singleSolidFromElement(Element element)
         {
             Options options = new Options();
@@ -343,7 +384,7 @@ namespace CEC_WallCast
             {
                 return true;
             }
-            else if (element.Category.Id == duct.Id && element.LookupParameter("直徑") != null)
+            else if (element.Category.Id == duct.Id /*&& element.LookupParameter("直徑") != null*/)
             {
                 return true;
             }
@@ -384,4 +425,5 @@ namespace CEC_WallCast
             return false;
         }
     }
+
 }
