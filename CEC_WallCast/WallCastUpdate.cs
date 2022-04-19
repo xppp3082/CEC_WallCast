@@ -41,7 +41,7 @@ namespace CEC_WallCast
                 //找到所有穿牆套管元件
                 List<FamilyInstance> famList = findTargetElements(doc);
                 List<string> usefulParaName = new List<string> { "開口長","BTOP", "BCOP", "BBOP", "TTOP", "TCOP", "TBOP",
-                    "干涉管數量", "系統別","【原則檢討】是否穿牆"};
+                    "干涉管數量", "系統別","【原則】是否穿牆"};
                 //檢查參數
                 foreach (FamilyInstance famInst in famList)
                 {
@@ -77,7 +77,7 @@ namespace CEC_WallCast
                         {
                             inst.LookupParameter("干涉管數量").Set(0);
                             inst.LookupParameter("系統別").Set("SP");
-                            inst.LookupParameter("【原則檢討】是否穿牆").Set("不符合");
+                            inst.LookupParameter("【原則】是否穿牆").Set("不符合");
                         }
                     }
 
@@ -93,6 +93,7 @@ namespace CEC_WallCast
             double sec = Math.Round(sw.Elapsed.TotalMilliseconds / 1000, 2);
             string output = $"穿牆套管資訊更新完成，共花費 {sec} 秒\n";
             MessageBox.Show(output + errorOutput);
+            errorOutput ="";
             return Result.Succeeded;
         }
         public static XYZ TransformPoint(XYZ point, Transform transform)
@@ -404,7 +405,7 @@ namespace CEC_WallCast
                 TBOP.Set(TBOP_toSet);
                 TCOP.Set(TCOP_toSet);
                 TTOP.Set(TTOP_toSet);
-                inst.LookupParameter("【原則檢討】是否穿牆").Set("OK");
+                inst.LookupParameter("【原則】是否穿牆").Set("OK");
                 updateCast = inst;
             }
             catch
