@@ -10,6 +10,7 @@ using System.Diagnostics;
 using System.Linq;
 using Autodesk.Revit.DB.Structure;
 using System.Windows.Forms;
+using System.Threading;
 #endregion
 
 namespace CEC_WallCast
@@ -40,48 +41,51 @@ namespace CEC_WallCast
 
                 //找到所有穿牆套管元件
                 List<FamilyInstance> famList = findTargetElements(doc);
-                List<string> usefulParaName = new List<string> { "開口長","BTOP", "BCOP", "BBOP", "TTOP", "TCOP", "TBOP",
+                using (WallCastProgressUI progressView2 = new WallCastProgressUI(famList.Count))
+                {
+                    List<string> usefulParaName = new List<string> { "開口長","BTOP", "BCOP", "BBOP", "TTOP", "TCOP", "TBOP",
                     "干涉管數量", "系統別","【原則】是否穿牆"};
-                //檢查參數
-                foreach (FamilyInstance famInst in famList)
-                {
-                    foreach (string item in usefulParaName)
+                    //檢查參數
+                    foreach (FamilyInstance famInst in famList)
                     {
-                        if (!checkPara(famInst, item))
+                        foreach (string item in usefulParaName)
                         {
-                            MessageBox.Show($"執行失敗，請檢查{famInst.Symbol.FamilyName}元件中是否缺少{item}參數欄位");
-                            return Result.Failed;
-                        }
-                    }
-                }
-
-                //子功能測試
-                using (Transaction trans = new Transaction(doc))
-                {
-                    trans.Start("更新穿牆套管資訊");
-                    Dictionary<ElementId, List<Element>> wallCastDict = getCastWallDict(doc);
-                    int transCount = 0;
-                    foreach (ElementId id in wallCastDict.Keys)
-                    {
-                        updateCastWithWall(doc.GetElement(id), wallCastDict[id].First());
-                        updateCastContent(doc, doc.GetElement(id));
-                        //用來記錄transform的方法有點詭異，日後可能會出bug
-                        modifyCastLen(doc.GetElement(id), wallCastDict[id].First(), usefulLinkTrans[transCount]);
-                        transCount++;
-                    }
-
-                    //檢查所有的實做套管，如果不再Dictionary中，則表示其沒有穿牆
-                    foreach (FamilyInstance inst in famList)
-                    {
-                        if (!wallCastDict.Keys.Contains(inst.Id))
-                        {
-                            inst.LookupParameter("干涉管數量").Set(0);
-                            inst.LookupParameter("系統別").Set("SP");
-                            inst.LookupParameter("【原則】是否穿牆").Set("不符合");
+                            if (!checkPara(famInst, item))
+                            {
+                                MessageBox.Show($"執行失敗，請檢查{famInst.Symbol.FamilyName}元件中是否缺少{item}參數欄位");
+                                return Result.Failed;
+                            }
                         }
                     }
 
-                    trans.Commit();
+                    using (Transaction trans = new Transaction(doc))
+                    {
+                        trans.Start("更新穿牆套管資訊");
+                        Dictionary<ElementId, List<Element>> wallCastDict = getCastWallDict(doc);
+                        int transCount = 0;
+                        foreach (ElementId id in wallCastDict.Keys)
+                        {
+                            updateCastWithWall(doc.GetElement(id), wallCastDict[id].First());
+                            updateCastContent(doc, doc.GetElement(id));
+                            //用來記錄transform的方法有點詭異，日後可能會出bug
+                            modifyCastLen(doc.GetElement(id), wallCastDict[id].First(), usefulLinkTrans[transCount]);
+                            transCount++;
+                            //以外參進行單位的更新進度顯示
+                            if (progressView2.Update()) break;
+                        }
+
+                        //檢查所有的實做套管，如果不再Dictionary中，則表示其沒有穿牆
+                        foreach (FamilyInstance inst in famList)
+                        {
+                            if (!wallCastDict.Keys.Contains(inst.Id))
+                            {
+                                inst.LookupParameter("干涉管數量").Set(0);
+                                inst.LookupParameter("系統別").Set("SP");
+                                inst.LookupParameter("【原則】是否穿牆").Set("不符合");
+                            }
+                        }
+                        trans.Commit();
+                    }
                 }
             }
             catch
@@ -93,7 +97,7 @@ namespace CEC_WallCast
             double sec = Math.Round(sw.Elapsed.TotalMilliseconds / 1000, 2);
             string output = $"穿牆套管資訊更新完成，共花費 {sec} 秒\n";
             MessageBox.Show(output + errorOutput);
-            errorOutput ="";
+            errorOutput = "";
             return Result.Succeeded;
         }
         public static XYZ TransformPoint(XYZ point, Transform transform)
@@ -319,7 +323,7 @@ namespace CEC_WallCast
             }
             return castWallDict;
         }
-                public double sortLevelbyHeight(Element element)
+        public double sortLevelbyHeight(Element element)
         {
             Level tempLevel = element as Level;
             double levelHeight = element.LookupParameter("立面").AsDouble();
@@ -342,8 +346,9 @@ namespace CEC_WallCast
                 if (!isCircleCast)
                 {
                     outterDiameter = inst.LookupParameter("開口高").AsDouble();
-                    castDiameter = outterDiameter/2;
-                }else if (isCircleCast)
+                    castDiameter = outterDiameter / 2;
+                }
+                else if (isCircleCast)
                 {
                     outterDiameter = inst.Symbol.LookupParameter("管外直徑").AsDouble();
                     castDiameter = outterDiameter / 2;
@@ -384,12 +389,12 @@ namespace CEC_WallCast
                 }
                 //後來改成以基準樓層計算偏移值
                 double basicWallHeight = topLevel.Elevation - level.Elevation;
-                double BBOP_toSet = castHeight  - outterDiameter/2;
+                double BBOP_toSet = castHeight - outterDiameter / 2;
                 double BCOP_toSet = castHeight;
                 double BTOP_toSet = castHeight + outterDiameter / 2;
                 double TCOP_toSet = basicWallHeight - BCOP_toSet;
-                double TBOP_toSet = TCOP_toSet + outterDiameter/2;
-                double TTOP_toSet = TCOP_toSet - outterDiameter/2 ;
+                double TBOP_toSet = TCOP_toSet + outterDiameter / 2;
+                double TTOP_toSet = TCOP_toSet - outterDiameter / 2;
 
                 #region 原版，可以計算升降板的距離
                 //double BBOP_toSet = castHeight - wallBaseOffset - outterDiameter/2;
@@ -423,7 +428,8 @@ namespace CEC_WallCast
             {
             BuiltInCategory.OST_PipeCurves,
             BuiltInCategory.OST_Conduit,
-            BuiltInCategory.OST_DuctCurves
+            BuiltInCategory.OST_DuctCurves,
+            BuiltInCategory.OST_CableTray
             };
             List<ElementFilter> filters = new List<ElementFilter>();
             foreach (BuiltInCategory built in builts)
@@ -454,7 +460,8 @@ namespace CEC_WallCast
                 {
             BuiltInCategory.OST_PipeCurves,
             BuiltInCategory.OST_Conduit,
-            BuiltInCategory.OST_DuctCurves
+            BuiltInCategory.OST_DuctCurves,
+            BuiltInCategory.OST_CableTray
             };
                 List<ElementFilter> filters = new List<ElementFilter>();
                 foreach (BuiltInCategory built in builts)
@@ -520,7 +527,7 @@ namespace CEC_WallCast
                 //針對蒐集到的管去做系統別的更新，因為電管沒有系統類型，要和管分開處理
                 if (pipeCollector_final.Count() == 1)
                 {
-                    if (pipeCollector_final.First().Category.Name == "電管")
+                    if (pipeCollector_final.First().Category.Name == "電管" || pipeCollector_final.First().Category.Name == "電纜架")
                     {
                         systemType.Set("E");
                     }
@@ -558,7 +565,7 @@ namespace CEC_WallCast
                     List<string> shortNameList = new List<string>();
                     foreach (Element pipe in pipeCollector_final)
                     {
-                        if (pipe.Category.Name == "電管")
+                        if (pipe.Category.Name == "電管" || pipe.Category.Name =="電纜架")
                         {
                             isPipe.Add(0);
                             shortNameList.Add("E");
@@ -618,7 +625,7 @@ namespace CEC_WallCast
             }
             return updateCast;
         }
-        public  Element modifyCastLen(Element elem , Element linkedWall,Transform toTrans)
+        public Element modifyCastLen(Element elem, Element linkedWall, Transform toTrans)
         {
             FamilyInstance updateCast = null;
             try
@@ -643,7 +650,7 @@ namespace CEC_WallCast
                 targetPoint = new XYZ(targetPoint.X, targetPoint.Y, castPt.Z);
                 XYZ positionChange = targetPoint - castPt;
                 double castLength = UnitUtils.ConvertFromInternalUnits(wall.Width, unitType) + 20;
-                double castLength_toSet = UnitUtils.ConvertToInternalUnits(castLength ,unitType);
+                double castLength_toSet = UnitUtils.ConvertToInternalUnits(castLength, unitType);
                 Parameter instLenPara = inst.LookupParameter("開口長");
 
                 //先調整位置

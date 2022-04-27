@@ -83,6 +83,12 @@ namespace CEC_WallCast
             System.Drawing.Image image_Num = Properties.Resources.穿牆套管ICON合集_重新編號_svg;
             ImageSource imgSrc4 = GetImageSource(image_Num);
 
+            System.Drawing.Image image_Rect = Properties.Resources.穿牆套管ICON合集_方開口_svg;
+            ImageSource imgSrc5 = GetImageSource(image_Rect);
+
+            System.Drawing.Image image_MultiRect = Properties.Resources.穿牆套管ICON合集_多管方開口_svg;
+            ImageSource imgSrc6 = GetImageSource(image_MultiRect);
+
 
             // create the button data
             PushButtonData btnData0 = new PushButtonData(
@@ -147,12 +153,38 @@ Assembly.GetExecutingAssembly().Location,
                 btnData4.LargeImage = imgSrc4;
             }
 
+            PushButtonData btnData5 = new PushButtonData(
+"MyButton_WallCastRect",
+"   方型牆開口   ",
+Assembly.GetExecutingAssembly().Location,
+"CEC_WallCast.CreateRectWallCast"
+);
+            {
+                btnData5.ToolTip = "點選外參牆與管生成穿牆方開口";
+                btnData5.LongDescription = "先點選需要創建的管段，再點選其穿過的外參牆，生成穿牆方開口";
+                btnData5.LargeImage = imgSrc5;
+            }
+
+            PushButtonData btnData6 = new PushButtonData(
+"MyButton_WallCastRectMulti",
+"   多管牆開口   ",
+Assembly.GetExecutingAssembly().Location,
+"CEC_WallCast.MultiWallRectCast"
+);
+            {
+                btnData6.ToolTip = "點選外參牆與多支管生成穿牆方開口";
+                btnData6.LongDescription = "先點選需要創建的管段(複數)，再點選其穿過的外參牆，生成穿牆方開口";
+                btnData6.LargeImage = imgSrc6;
+            }
 
 
-            //創建穿樑套管(ST&RC)
+            //創建穿牆套管(圓&方)
             PushButton button0 = panel.AddItem(btnData0) as PushButton;
             PushButton button = panel.AddItem(btnData) as PushButton;
-
+            SplitButtonData rectCastButtonData = new SplitButtonData("WallCastRect", "方型牆開口");
+            SplitButton splitButton = panel.AddItem(rectCastButtonData) as SplitButton;
+            PushButton button5 = splitButton.AddPushButton(btnData5);
+            button5 = splitButton.AddPushButton(btnData6);
 
             //複製所有套管
             PushButton button2 = panel2.AddItem(btnData2) as PushButton;
@@ -191,7 +223,6 @@ Assembly.GetExecutingAssembly().Location,
         {
             //製作一個function專門來處理圖片
             BitmapImage bmp = new BitmapImage();
-
             using (MemoryStream ms = new MemoryStream())
             {
                 img.Save(ms, ImageFormat.Png);
@@ -205,7 +236,6 @@ Assembly.GetExecutingAssembly().Location,
 
                 bmp.EndInit();
             }
-
             return bmp;
         }
     }

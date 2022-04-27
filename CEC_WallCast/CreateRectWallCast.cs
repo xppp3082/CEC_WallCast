@@ -1,21 +1,20 @@
-﻿#region Namespaces
-using Autodesk.Revit.ApplicationServices;
-using Autodesk.Revit.Attributes;
+﻿using System;
+using System.Diagnostics;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using Autodesk.Revit.UI.Selection;
-using System;
-using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
 using Autodesk.Revit.DB.Structure;
 using System.Windows.Forms;
-#endregion
 
 namespace CEC_WallCast
 {
     [Autodesk.Revit.Attributes.Transaction(Autodesk.Revit.Attributes.TransactionMode.Manual)]
-    class CreateWallCastV2 : IExternalCommand
+    class CreateRectWallCast : IExternalCommand
     {
         public static DisplayUnitType unitType = DisplayUnitType.DUT_MILLIMETERS;
         public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elements)
@@ -66,21 +65,23 @@ namespace CEC_WallCast
                     using (Transaction tx = new Transaction(doc))
                     {
                         tx.Start("載入檔案測試");
-                        Wall_Cast = new WallCast().WallCastSymbol(doc);
+                        Wall_Cast = new RectWallCast().WallCastSymbol(doc);
                         tx.Commit();
                     }
-
+                    #region 放置穿牆套管開始
                     using (Transaction trans = new Transaction(doc))
                     {
                         trans.Start("放置穿牆套管");
                         if (HoleLocation != null)
                         {
-                            FamilySymbol CastSymbol2 = new WallCast().findWall_CastSymbol(doc, Wall_Cast, pickPipe);
+                            FamilySymbol CastSymbol2 = new RectWallCast().findWall_CastSymbol(doc, Wall_Cast, pickPipe);
+                            Parameter pipeWidth= getPipeWidth(pickPipe);
+                            Parameter pipeHigh = getPipeHeight(pickPipe);
                             instance = doc.Create.NewFamilyInstance(HoleLocation, CastSymbol2, level, StructuralType.NonStructural);
                             //參數檢查
                             List<string> paraNameToCheck = new List<string>()
                                 {
-                                   "開口長","系統別","TTOP","TCOP","TBOP","BBOP","BCOP","BTOP"
+                                   "開口寬","開口高","開口長","系統別","TTOP","TCOP","TBOP","BBOP","BCOP","BTOP"
                                 };
 
                             foreach (string item in paraNameToCheck)
@@ -91,9 +92,17 @@ namespace CEC_WallCast
                                     return Result.Failed;
                                 }
                             }
+                            double castOffset = UnitUtils.ConvertToInternalUnits(10, unitType);
+                            double heightToSet = pipeHigh.AsDouble() + castOffset;
+                            double widthToSet = pipeWidth.AsDouble() + castOffset;
+                            instance.LookupParameter("開口高").Set(heightToSet);
+                            instance.LookupParameter("開口寬").Set(widthToSet);
 
                             //調整高度與長度
-                            double castDiameter = instance.Symbol.LookupParameter("管外直徑").AsDouble() / 2;
+                            double castDiameter = heightToSet / 2;
+                            //double castDiameter = instance.LookupParameter("開口高").AsDouble() / 4;
+                            //MessageBox.Show(UnitUtils.ConvertFromInternalUnits(heightToSet, unitType).ToString());
+                            //MessageBox.Show(UnitUtils.ConvertFromInternalUnits(castDiameter, unitType).ToString());
                             double pipeHeight = pickPipe.LookupParameter("偏移").AsDouble();
                             instance.LookupParameter("偏移").Set(pipeHeight - castDiameter);
                             double castLength = UnitUtils.ConvertToInternalUnits(holeLength, unitType);
@@ -111,7 +120,7 @@ namespace CEC_WallCast
                             Parameter TTOP = instance.LookupParameter("TTOP");
                             Parameter TCOP = instance.LookupParameter("TCOP");
                             Parameter TBOP = instance.LookupParameter("TBOP");
-                            double outterDiameter = instance.Symbol.LookupParameter("管外直徑").AsDouble();
+                            double outterDiameter = instance.LookupParameter("開口高").AsDouble();
                             double wallBaseOffset = wall.get_Parameter(BuiltInParameter.WALL_BASE_OFFSET).AsDouble();
                             double wallHeight = wall.get_Parameter(BuiltInParameter.WALL_USER_HEIGHT_PARAM).AsDouble();
                             //設定值計算，後來修正成只要用FL計算即可
@@ -141,7 +150,7 @@ namespace CEC_WallCast
                             double basicWallHeight = topLevel.Elevation - level.Elevation;
                             double BBOP_toSet = pipeHeight - outterDiameter / 2;
                             double BCOP_toSet = pipeHeight;
-                            double BTOP_toSet = pipeHeight+ outterDiameter / 2;
+                            double BTOP_toSet = pipeHeight + outterDiameter / 2;
                             double TCOP_toSet = basicWallHeight - BCOP_toSet;
                             double TBOP_toSet = TCOP_toSet + outterDiameter / 2;
                             double TTOP_toSet = TCOP_toSet - outterDiameter / 2;
@@ -162,11 +171,10 @@ namespace CEC_WallCast
                         }
                         trans.Commit();
                     }
+                    #endregion 
                 }
                 catch
                 {
-                    //MessageBox.Show("執行失敗");
-                    //return Result.Failed;
                     break;
                 }
             }
@@ -185,7 +193,6 @@ namespace CEC_WallCast
             }
             return result;
         }
-
         public double sortLevelbyHeight(Element element)
         {
             Level tempLevel = element as Level;
@@ -205,7 +212,7 @@ namespace CEC_WallCast
         }
         public XYZ GetHoleLocation(Element wallElem, Element pipeElem, Transform trans)
         {
-     
+
             //取得牆的solid
             Solid solid_wall = singleSolidFromElement(wallElem);
             solid_wall = SolidUtils.CreateTransformed(solid_wall, trans);
@@ -230,210 +237,113 @@ namespace CEC_WallCast
             return point_Center;
 
         }
-        public class WallCast
+        public Parameter getPipeWidth(Element element)
         {
-            #region
-            //將穿牆套管的功能做成class管理
-            //1.先找到套管的Family
-            //2.用Family反查Symbol
-            #endregion
-            public Family WallCastSymbol(Document doc)
+            Parameter targetPara = null;
+            //Pipe >用外徑計算
+            if (element.get_Parameter(BuiltInParameter.RBS_PIPE_OUTER_DIAMETER) != null)
             {
-                string internalNameWall = "CEC-穿牆套管";
-                Family Wall_CastType = null;
-                ElementFilter Wall_CastCategoryFilter = new ElementCategoryFilter(BuiltInCategory.OST_PipeAccessory);
-                ElementFilter Wall_CastSymbolFilter = new ElementClassFilter(typeof(FamilySymbol));
-
-                LogicalAndFilter andFilter = new LogicalAndFilter(Wall_CastCategoryFilter, Wall_CastSymbolFilter);
-                FilteredElementCollector RC_CastSymbol = new FilteredElementCollector(doc);
-                RC_CastSymbol = RC_CastSymbol.WherePasses(andFilter);//這地方有點怪，無法使用andFilter RC_CastSymbolFilter
-                bool symbolFound = false;
-                foreach (FamilySymbol e in RC_CastSymbol)
-                {
-                    Parameter p = e.LookupParameter("API識別名稱");
-                    if (p != null && p.AsString().Contains(internalNameWall))
-                    {
-                        symbolFound = true;
-                        Wall_CastType = e.Family;
-                        break;
-                    }
-                }
-                if (!symbolFound)
-                {
-                    MessageBox.Show("尚未載入指定的穿牆套管元件!");
-                }
-                return Wall_CastType;
+                targetPara = element.get_Parameter(BuiltInParameter.RBS_PIPE_OUTER_DIAMETER);
             }
-
-            public FamilySymbol findWall_CastSymbol(Document doc, Family CastFamily, Element element)
+            //Conduit
+            else if (element.get_Parameter(BuiltInParameter.RBS_CONDUIT_DIAMETER_PARAM) != null)
             {
-                FamilySymbol targetFamilySymbol = null; //用來找目標familySymbol
-                                                        //如果確定找到family後，針對不同得管選取不同的穿樑套管大小，以大兩吋為規則，如果有坡度則大三吋
-                Parameter targetPara = null;
-                //Pipe
-                if (element.get_Parameter(BuiltInParameter.RBS_PIPE_DIAMETER_PARAM) != null)
-                {
-                    targetPara = element.get_Parameter(BuiltInParameter.RBS_PIPE_DIAMETER_PARAM);
-                }
-                //Conduit
-                else if (element.get_Parameter(BuiltInParameter.RBS_CONDUIT_DIAMETER_PARAM) != null)
-                {
-                    targetPara = element.get_Parameter(BuiltInParameter.RBS_CONDUIT_DIAMETER_PARAM);
-                }
-                //Duct
-                else if (element.get_Parameter(BuiltInParameter.RBS_CURVE_DIAMETER_PARAM) != null)
-                {
-                    targetPara = element.get_Parameter(BuiltInParameter.RBS_CURVE_DIAMETER_PARAM);
-                }
-                else if (element.get_Parameter(BuiltInParameter.RBS_CURVE_WIDTH_PARAM) != null)
-                {
-                    targetPara = element.get_Parameter(BuiltInParameter.RBS_CURVE_WIDTH_PARAM);
-                }
-                //電纜架
-                else if (element.get_Parameter(BuiltInParameter.RBS_CABLETRAY_WIDTH_PARAM) != null)
-                {
-                    targetPara = element.get_Parameter(BuiltInParameter.RBS_CABLETRAY_WIDTH_PARAM);
-                }
-                //利用管徑(doubleType)來判斷
-                var covertUnit = UnitUtils.ConvertFromInternalUnits(targetPara.AsDouble(), unitType);
-                if (CastFamily != null)
-                {
-                    foreach (ElementId castId in CastFamily.GetFamilySymbolIds())
-                    {
-                        FamilySymbol tempSymbol = doc.GetElement(castId) as FamilySymbol;
-                        //if (targetPara.AsValueString() == "50 mm")
-                        if (covertUnit >= 50 && covertUnit < 65)
-                        {
-                            if (tempSymbol.Name == "80mm")
-                            {
-                                targetFamilySymbol = tempSymbol;
-                            }
-                        }
-                        //else if (targetPara.AsValueString() == "65 mm")
-                        else if (covertUnit >= 65 && covertUnit < 75)
-                        {
-                            if (tempSymbol.Name == "100mm")
-                            {
-                                targetFamilySymbol = tempSymbol;
-                            }
-                        }
-                        //多出關於電管的判斷
-                        //else if (targetPara.AsValueString() == "80 mm" || targetPara.AsValueString() == "82 mm" || targetPara.AsValueString() == "92 mm" || targetPara.AsValueString() == "75 mm")
-                        else if (covertUnit >= 75 && covertUnit <= 95)
-                        {
-                            if (tempSymbol.Name == "125mm")
-                            {
-                                targetFamilySymbol = tempSymbol;
-                            }
-                        }
-                        //else if (targetPara.AsValueString() == "100 mm" || targetPara.AsValueString() == "88 mm" || targetPara.AsValueString() == "104 mm")
-                        else if (covertUnit >= 100 && covertUnit <= 125)
-                        {
-                            if (tempSymbol.Name == "150mm")
-                            {
-                                targetFamilySymbol = tempSymbol;
-                            }
-                        }
-                        //else if (targetPara.AsValueString() == "125 mm")
-                        else if (covertUnit > 125 && covertUnit <= 150)
-                        {
-                            if (tempSymbol.Name == "200mm")
-                            {
-                                targetFamilySymbol = tempSymbol;
-                            }
-                        }
-                        else if (covertUnit > 150 && covertUnit <= 200)
-                        {
-                            if (tempSymbol.Name == "250mm")
-                            {
-                                targetFamilySymbol = tempSymbol;
-                            }
-                        }
-                        else if (covertUnit > 200)
-                        {
-                            if (tempSymbol.Name == "300mm")
-                            {
-                                targetFamilySymbol = tempSymbol;
-                            }
-                        }
-                        else
-                        {
-                            if (tempSymbol.Name == "80mm")
-                            {
-                                targetFamilySymbol = tempSymbol;
-                            }
-                        }
-                    }
-                }
-                targetFamilySymbol.Activate();
-                return targetFamilySymbol;
+                targetPara = element.get_Parameter(BuiltInParameter.RBS_CONDUIT_DIAMETER_PARAM);
             }
+            //Duct
+            else if (element.get_Parameter(BuiltInParameter.RBS_CURVE_DIAMETER_PARAM) != null)
+            {
+                targetPara = element.get_Parameter(BuiltInParameter.RBS_CURVE_DIAMETER_PARAM);
+            }
+            //方型Duct
+            else if (element.get_Parameter(BuiltInParameter.RBS_CURVE_WIDTH_PARAM) != null)
+            {
+                targetPara = element.get_Parameter(BuiltInParameter.RBS_CURVE_WIDTH_PARAM);
+            }
+            //電纜架
+            else if (element.get_Parameter(BuiltInParameter.RBS_CABLETRAY_WIDTH_PARAM) != null)
+            {
+                targetPara = element.get_Parameter(BuiltInParameter.RBS_CABLETRAY_WIDTH_PARAM);
+            }
+            return targetPara;
+        }
+        public Parameter getPipeHeight(Element element)
+        {
+            Parameter targetPara = null;
+            //Pipe
+            if (element.get_Parameter(BuiltInParameter.RBS_PIPE_OUTER_DIAMETER) != null)
+            {
+                targetPara = element.get_Parameter(BuiltInParameter.RBS_PIPE_OUTER_DIAMETER);
+            }
+            //Conduit
+            else if (element.get_Parameter(BuiltInParameter.RBS_CONDUIT_DIAMETER_PARAM) != null)
+            {
+                targetPara = element.get_Parameter(BuiltInParameter.RBS_CONDUIT_DIAMETER_PARAM);
+            }
+            //Duct
+            else if (element.get_Parameter(BuiltInParameter.RBS_CURVE_DIAMETER_PARAM) != null)
+            {
+                targetPara = element.get_Parameter(BuiltInParameter.RBS_CURVE_DIAMETER_PARAM);
+            }
+            //方型Duct
+            else if (element.get_Parameter(BuiltInParameter.RBS_CURVE_HEIGHT_PARAM) != null)
+            {
+                targetPara = element.get_Parameter(BuiltInParameter.RBS_CURVE_HEIGHT_PARAM);
+            }
+            //電纜架
+            else if (element.get_Parameter(BuiltInParameter.RBS_CABLETRAY_HEIGHT_PARAM) != null)
+            {
+                targetPara = element.get_Parameter(BuiltInParameter.RBS_CABLETRAY_HEIGHT_PARAM);
+            }
+            return targetPara;
         }
 
     }
-
-    //過濾器區域
-    public class PipeSelectionFilter : ISelectionFilter
+    public class RectWallCast
     {
-        private Document _doc;
-        public PipeSelectionFilter(Document doc)
+        #region
+        //將穿牆套管的功能做成class管理
+        //1.先找到套管的Family
+        //2.用Family反查Symbol
+        #endregion
+        public Family WallCastSymbol(Document doc)
         {
-            this._doc = doc;
-        }
-        public bool AllowElement(Element element)
-        {
-            Category pipe = Category.GetCategory(_doc, BuiltInCategory.OST_PipeCurves);
-            Category duct = Category.GetCategory(_doc, BuiltInCategory.OST_DuctCurves);
-            Category conduit = Category.GetCategory(_doc, BuiltInCategory.OST_Conduit);
-            Category tray = Category.GetCategory(_doc, BuiltInCategory.OST_CableTray);
-            if (element.Category.Id == pipe.Id)
-            {
-                return true;
-            }
-            else if (element.Category.Id == duct.Id)
-            {
-                return true;
-            }
-            else if (element.Category.Id == conduit.Id )
-            {
-                return true;
-            }
-            else if(element.Category.Id == tray.Id)
-            {
-                return true;
-            }
-            return false;
-        }
+            string internalNameWall = "CEC-穿牆開口-方";
+            Family Wall_CastType = null;
+            ElementFilter Wall_CastCategoryFilter = new ElementCategoryFilter(BuiltInCategory.OST_PipeAccessory);
+            ElementFilter Wall_CastSymbolFilter = new ElementClassFilter(typeof(FamilySymbol));
 
-        public bool AllowReference(Reference refer, XYZ point)
+            LogicalAndFilter andFilter = new LogicalAndFilter(Wall_CastCategoryFilter, Wall_CastSymbolFilter);
+            FilteredElementCollector RC_CastSymbol = new FilteredElementCollector(doc);
+            RC_CastSymbol = RC_CastSymbol.WherePasses(andFilter);//這地方有點怪，無法使用andFilter RC_CastSymbolFilter
+            bool symbolFound = false;
+            foreach (FamilySymbol e in RC_CastSymbol)
+            {
+                Parameter p = e.LookupParameter("API識別名稱");
+                if (p != null && p.AsString().Contains(internalNameWall))
+                {
+                    symbolFound = true;
+                    Wall_CastType = e.Family;
+                    break;
+                }
+            }
+            if (!symbolFound)
+            {
+                MessageBox.Show("尚未載入指定的穿牆套管元件!");
+            }
+            return Wall_CastType;
+        }
+        public FamilySymbol findWall_CastSymbol(Document doc, Family CastFamily, Element element)
         {
-            return false;
+            FamilySymbol targetFamilySymbol = null; //用來找目標familySymbol
+            if (CastFamily != null)
+            {
+                //因為方形是通用類型的關係，直接找到第一個就可以返回
+                FamilySymbol tempSymbol = doc.GetElement(CastFamily.GetFamilySymbolIds().First()) as FamilySymbol;
+                targetFamilySymbol = tempSymbol;
+            }
+            targetFamilySymbol.Activate();
+            return targetFamilySymbol;
         }
     }
-    //限制選擇牆時能選到的品類
-    public class WallSelectionFilter : ISelectionFilter
-    {
-        private Document _doc;
-
-        public WallSelectionFilter(Document doc)
-        {
-            this._doc = doc;
-        }
-        public bool AllowElement(Element element)
-        {
-            return true;
-        }
-
-        public bool AllowReference(Reference refer, XYZ point)
-        {
-            var link = this._doc.GetElement(refer) as RevitLinkInstance;
-            var elem = link.GetLinkDocument().GetElement(refer.LinkedElementId);
-            if (elem is Wall)
-            {
-                return true;
-            }
-            return false;
-        }
-    }
-
 }
