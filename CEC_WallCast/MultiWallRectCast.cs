@@ -118,7 +118,7 @@ namespace CEC_WallCast
                     intersectWidth = intersectWidth.OrderBy(pt => pt.Y).ToList();
                     castWidth = Math.Abs(intersectWidth.First().Y - intersectWidth.Last().Y);
                 }
-                double castOffset = UnitUtils.ConvertToInternalUnits(10, unitType);
+                double castOffset = UnitUtils.ConvertToInternalUnits(100, unitType);
                 castHeight = castHeight + castOffset;
                 castWidth = castWidth + castOffset;
 

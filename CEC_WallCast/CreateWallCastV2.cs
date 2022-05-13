@@ -53,6 +53,8 @@ namespace CEC_WallCast
 
 
                     MEPCurve pipeCrv = pickPipe as MEPCurve;
+                    LocationCurve pipeLocate =  pipeCrv.Location as LocationCurve;
+                    Curve pipeCurve = pipeLocate.Curve;
                     Level level = pipeCrv.ReferenceLevel; //取得管線的參考樓層
                     double elevation = level.Elevation;
                     XYZ HoleLocation = GetHoleLocation(linkedWall, pickPipe, linkTransform);
@@ -92,10 +94,30 @@ namespace CEC_WallCast
                                 }
                             }
 
+                            //2022.05.13_新增：針對具有斜率的管材，計算對應的偏移值
+                            double slopeOffset = 0.0;
+                            Parameter pipeSlope = pickPipe.LookupParameter("斜度");
+                            if (pipeSlope != null && pipeSlope.AsDouble() != 0)
+                            {
+                                double pipeStartHeight = pickPipe.get_Parameter(BuiltInParameter.RBS_START_OFFSET_PARAM).AsDouble();
+                                double pipeEndHeight = pickPipe.get_Parameter(BuiltInParameter.RBS_END_OFFSET_PARAM).AsDouble();
+                                XYZ startPt = pipeCurve.GetEndPoint(0);
+                                XYZ endPt = pipeCurve.GetEndPoint(1);
+                                double distToStart = HoleLocation.DistanceTo(startPt);
+                                if (pipeStartHeight >= pipeEndHeight){
+                                    slopeOffset = -(distToStart * pipeSlope.AsDouble());
+                                }
+                                else if (pipeStartHeight < pipeEndHeight)
+                                {
+                                    slopeOffset = distToStart * pipeSlope.AsDouble();
+                                }
+                            }
+
+
                             //調整高度與長度
                             double castDiameter = instance.Symbol.LookupParameter("管外直徑").AsDouble() / 2;
                             double pipeHeight = pickPipe.LookupParameter("偏移").AsDouble();
-                            instance.LookupParameter("偏移").Set(pipeHeight - castDiameter);
+                            instance.LookupParameter("偏移").Set(pipeHeight - castDiameter+slopeOffset);
                             double castLength = UnitUtils.ConvertToInternalUnits(holeLength, unitType);
                             instance.LookupParameter("開口長").Set(castLength);
                             LocationPoint loPoint = instance.Location as LocationPoint;

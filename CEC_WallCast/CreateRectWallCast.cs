@@ -92,7 +92,7 @@ namespace CEC_WallCast
                                     return Result.Failed;
                                 }
                             }
-                            double castOffset = UnitUtils.ConvertToInternalUnits(10, unitType);
+                            double castOffset = UnitUtils.ConvertToInternalUnits(100, unitType);
                             double heightToSet = pipeHigh.AsDouble() + castOffset;
                             double widthToSet = pipeWidth.AsDouble() + castOffset;
                             instance.LookupParameter("開口高").Set(heightToSet);
