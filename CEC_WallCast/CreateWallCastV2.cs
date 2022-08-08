@@ -380,7 +380,7 @@ namespace CEC_WallCast
                         }
                         else
                         {
-                            if (tempSymbol.Name == "80mm")
+                            if (tempSymbol.Name == "50mm")
                             {
                                 targetFamilySymbol = tempSymbol;
                             }

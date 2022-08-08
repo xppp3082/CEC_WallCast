@@ -71,6 +71,8 @@ namespace CEC_WallCast
                 //2.找出最高的點&最低的點
                 //3.找出最左和最右的點
                 MEPCurve pipeCrv = pickPipes.First() as MEPCurve;
+                LocationCurve pipeLocate = pipeCrv.Location as LocationCurve;
+                Curve pipeCurve = pipeLocate.Curve;
                 Level level = pipeCrv.ReferenceLevel;//取得管線的參考樓層
                 if (level == null)
                 {
@@ -130,7 +132,7 @@ namespace CEC_WallCast
                 XYZ targetPt = new XYZ((widthPt1.X + widthPt2.X) / 2, (widthPt1.Y + widthPt2.Y) / 2, (heightPt1.Z + heightPt2.Z) / 2 - elevation);
 
                 Family Wall_Cast;
-                FamilyInstance instance = null;
+                FamilyInstance instance = null; 
                 using (Transaction tx = new Transaction(doc))
                 {
                     tx.Start("載入檔案測試");
