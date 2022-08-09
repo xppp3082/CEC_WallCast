@@ -63,17 +63,22 @@ namespace CEC_WallCast
                         trans.Start("更新穿牆套管資訊");
                         Dictionary<ElementId, List<Element>> wallCastDict = getCastWallDict(doc);
                         int transCount = 0;
+                        List<double> intersectVol = new List<double>();
                         foreach (ElementId id in wallCastDict.Keys)
                         {
-                            updateCastWithWall(doc.GetElement(id), wallCastDict[id].First());
+                            //問題思考：要如何針對差集的量體去做元件的排序，同時可以精確對應每到牆對應的transform
+                            //因為字典沒辦法再foreach迴圈結束前自己修改，所以必須要新增modifyWallLst
+                            List<Element> modifyWallLst = wallCastDict[id].OrderByDescending(x => calculateSolidVol(doc.GetElement(id), x, usefulLinkTrans[transCount])).ToList();
+                            int orginIndex = wallCastDict[id].IndexOf(modifyWallLst.First());
+
+                            updateCastWithWall(doc.GetElement(id), modifyWallLst.First());
                             updateCastContent(doc, doc.GetElement(id));
-                            //用來記錄transform的方法有點詭異，日後可能會出bug
-                            modifyCastLen(doc.GetElement(id), wallCastDict[id].First(), usefulLinkTrans[transCount]);
+                            //用來記錄transform的方法有點詭異，日後可能會出bug//(2022.08.09更新_利用原本的排序反查原本的orginIndex)
+                            modifyCastLen(doc.GetElement(id), modifyWallLst.First(), usefulLinkTrans[orginIndex]);
                             transCount++;
                             //以外參進行單位的更新進度顯示
                             if (progressView2.Update()) break;
                         }
-
                         //檢查所有的實做套管，如果不再Dictionary中，則表示其沒有穿牆
                         foreach (FamilyInstance inst in famList)
                         {
@@ -84,6 +89,7 @@ namespace CEC_WallCast
                                 inst.LookupParameter("【原則】是否穿牆").Set("不符合");
                             }
                         }
+
                         trans.Commit();
                     }
                 }
@@ -157,6 +163,17 @@ namespace CEC_WallCast
                 }
             }
             return solids;
+        }
+        public Solid singleSolidFromWall(Element element)
+        {
+            Options options = new Options();
+            GeometryElement geomElem = element.get_Geometry(options);
+            Solid solidResult = null;
+            foreach (GeometryObject geomObj in geomElem)
+            {
+                solidResult = geomObj as Solid;
+            }
+            return solidResult;
         }
         public Solid singleSolidFromElement(Element inputElement)
         {
@@ -565,7 +582,7 @@ namespace CEC_WallCast
                     List<string> shortNameList = new List<string>();
                     foreach (Element pipe in pipeCollector_final)
                     {
-                        if (pipe.Category.Name == "電管" || pipe.Category.Name =="電纜架")
+                        if (pipe.Category.Name == "電管" || pipe.Category.Name == "電纜架")
                         {
                             isPipe.Add(0);
                             shortNameList.Add("E");
@@ -670,6 +687,21 @@ namespace CEC_WallCast
                 errorOutput += $"更新套管長度失敗，ID為 {elem.Id} 的套管無法更新長度!\n";
             }
             return updateCast;
+        }
+
+        public double calculateSolidVol(Element inst, Element linkedWall, Transform toTrans)
+        {
+            //計算套管與牆之間的交集量體，並回傳其體積大小
+            double vol = 0.0;
+            Solid instSolid = singleSolidFromElement(inst);
+            Solid linkedWallSolid = singleSolidFromWall(linkedWall);
+            linkedWallSolid = SolidUtils.CreateTransformed(linkedWallSolid, toTrans);
+            Solid interSolid = BooleanOperationsUtils.ExecuteBooleanOperation(instSolid, linkedWallSolid, BooleanOperationsType.Intersect);
+            if (Math.Abs(interSolid.Volume) > 0.000001)
+            {
+                vol = interSolid.Volume;
+            }
+            return vol;
         }
     }
 }
