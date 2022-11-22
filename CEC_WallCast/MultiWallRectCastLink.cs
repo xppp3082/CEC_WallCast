@@ -16,7 +16,7 @@ using System.Windows.Forms;
 namespace CEC_WallCast
 {
     [Autodesk.Revit.Attributes.Transaction(Autodesk.Revit.Attributes.TransactionMode.Manual)]
-    class MultiWallRectCast : IExternalCommand
+    class MultiWallRectCastLink : IExternalCommand
     {
 #if RELEASE2019
         public static DisplayUnitType unitType = DisplayUnitType.DUT_MILLIMETERS;
@@ -31,20 +31,10 @@ namespace CEC_WallCast
                 UIDocument uidoc = uiapp.ActiveUIDocument;
                 Autodesk.Revit.ApplicationServices.Application app = uiapp.Application;
                 Document doc = uidoc.Document;
-
-                //拿到管元件(多管)
-                ISelectionFilter pipeFilter = new PipeSelectionFilter(doc);
                 ISelectionFilter linkedPipeFilter = new linkedPipeSelectionFilter(doc);
-                IList<Reference> pickPipeRefs = uidoc.Selection.PickObjects(ObjectType.Element, pipeFilter, "請選擇「本端模型」中貫穿牆的管");
-                List<Element> pickPipes = new List<Element>();
-                foreach (Reference refer in pickPipeRefs)
-                {
-                    Element tempPipe = doc.GetElement(refer);
-                    pickPipes.Add(tempPipe);
-                }
                 IList<Reference> linkedPickPipeRefs = uidoc.Selection.PickObjects(ObjectType.LinkedElement, linkedPipeFilter, "請選擇「連結模型」中貫穿牆的管(選填)");
-                //string output = "";
-                foreach(Reference refer in linkedPickPipeRefs)
+                List<Element> pickPipes = new List<Element>();
+                foreach (Reference refer in linkedPickPipeRefs)
                 {
                     RevitLinkInstance pipeLinkedInst = doc.GetElement(refer.ElementId) as RevitLinkInstance;
                     Transform pipeLinkedTransform = pipeLinkedInst.GetTotalTransform();
@@ -52,7 +42,6 @@ namespace CEC_WallCast
                     pickPipes.Add(linkedPipe);
                     //output += $"{linkedPipe.Name}\n";
                 }
-
                 //拿到整份牆外參檔&Transform
                 ISelectionFilter linkedWallFilter = new WallSelectionFilter(doc);
                 Reference pickWallRef = uidoc.Selection.PickObject(ObjectType.LinkedElement, linkedWallFilter, "請選擇「連結模型」中被貫穿的牆");
@@ -69,20 +58,29 @@ namespace CEC_WallCast
                 XYZ holeDir = XYZ.BasisY;
                 double angle = holeDir.AngleTo(wallNorDir);
 
-                //MessageBox.Show($"此牆向量為{Math.Round(wallDir.X, 2)} &{Math.Round(wallDir.Y, 2)}");
-
-                //1.擷取每支管和這道牆的交界點
-                //2.找出最高的點&最低的點
-                //3.找出最左和最右的點
-                MEPCurve pipeCrv = pickPipes.First() as MEPCurve;
-                LocationCurve pipeLocate = pipeCrv.Location as LocationCurve;
+                MEPCurve linkPipeCrv = pickPipes.First() as MEPCurve;
+                LocationCurve pipeLocate = linkPipeCrv.Location as LocationCurve;
                 Curve pipeCurve = pipeLocate.Curve;
-                Level level = pipeCrv.ReferenceLevel;//取得管線的參考樓層
-                if (level == null)
+                //取得管線的參考樓層，要因應外參管和本地端管因為樓層元素不一樣的狀況進行判斷
+                Level pipeLevel = null;
+                if (pipeLevel == null)
                 {
-                    level =doc.GetElement( doc.ActiveView.LevelId) as Level;
+                    string LevelName = linkPipeCrv.ReferenceLevel.Name;
+                    FilteredElementCollector levelFilter = new FilteredElementCollector(doc).OfClass(typeof(Level));
+                    foreach (Level le in levelFilter)
+                    {
+                        if (le.Name == LevelName)
+                        {
+                            pipeLevel = le;
+                        }
+                    }
                 }
-                double elevation = level.ProjectElevation;
+                else
+                {
+                    MessageBox.Show("請確認「連結模型」中的樓層命名原則是否和本機端一致");
+                    return Result.Failed;
+                }
+                double elevation = pipeLevel.ProjectElevation;
                 List<XYZ> intersectHeight = new List<XYZ>();
                 List<XYZ> intersectWidth = new List<XYZ>();
                 foreach (Element pickPipe in pickPipes)
@@ -104,11 +102,7 @@ namespace CEC_WallCast
                     intersectHeight.Add(temp_intersectDn);
                     intersectWidth.Add(temp_intersectRight);
                     intersectWidth.Add(temp_intersectLeft);
-                    //XYZ temp_intersectRight = null;
-                    //XYZ temp_intersectLeft = null;
-                    //先判斷牆的走向
                 }
-                //幫list中的資料重新排序
                 double castLength = UnitUtils.ConvertToInternalUnits(holeLength, unitType);
                 double castHeight = 0.0;
                 double castWidth = 0.0;
@@ -136,19 +130,18 @@ namespace CEC_WallCast
                 XYZ targetPt = new XYZ((widthPt1.X + widthPt2.X) / 2, (widthPt1.Y + widthPt2.Y) / 2, (heightPt1.Z + heightPt2.Z) / 2 - elevation);
 
                 Family Wall_Cast;
-                FamilyInstance instance = null; 
+                FamilyInstance instance = null;
                 using (Transaction tx = new Transaction(doc))
                 {
                     tx.Start("載入檔案測試");
                     Wall_Cast = new RectWallCast().WallCastSymbol(doc);
                     tx.Commit();
                 }
-
                 using (Transaction trans = new Transaction(doc))
                 {
                     trans.Start("放置多管共用套管");
                     FamilySymbol CastSymbol2 = new RectWallCast().findWall_CastSymbol(doc, Wall_Cast, pickPipes.First());
-                    instance = doc.Create.NewFamilyInstance(targetPt, CastSymbol2, level, StructuralType.NonStructural);
+                    instance = doc.Create.NewFamilyInstance(targetPt, CastSymbol2, pipeLevel, StructuralType.NonStructural);
                     List<string> paraNameToCheck = new List<string>()
                      {
                       "開口寬","開口高","開口長","系統別","TTOP","TCOP","TBOP","BBOP","BCOP","BTOP"
@@ -204,7 +197,7 @@ namespace CEC_WallCast
                         Level le = level_List[i] as Level;
                         levelNames.Add(le.Name);
                     }
-                    int index_lowLevel = levelNames.IndexOf(level.Name);
+                    int index_lowLevel = levelNames.IndexOf(pipeLevel.Name);
                     int index_topLevel = index_lowLevel + 1;
                     Level topLevel = null;
                     if (index_topLevel < level_List.Count())
@@ -217,7 +210,7 @@ namespace CEC_WallCast
                         return Result.Failed;
                     }
                     //預計寫入的計算值
-                    double basicWallHeight = topLevel.Elevation - level.Elevation;
+                    double basicWallHeight = topLevel.Elevation - pipeLevel.Elevation;
                     double BBOP_toSet = instHeight;
                     double BCOP_toSet = instHeight + outterDiameter / 2;
                     double BTOP_toSet = instHeight + outterDiameter;
@@ -233,7 +226,6 @@ namespace CEC_WallCast
 
                     trans.Commit();
                 }
-
             }
             catch
             {
@@ -361,65 +353,5 @@ namespace CEC_WallCast
             return targetPara;
         }
     }
-    //因為多管共管的功能有會涉及到不同外參的管，所以過濾器要另外處理
-    public class linkedPipeSelectionFilter : ISelectionFilter
-    {
-        private Document _doc;
-        public linkedPipeSelectionFilter(Document doc)
-        {
-            this._doc = doc;
-        }
-        public bool AllowElement(Element element)
-        {
-            return true;
-        }
-        public bool AllowReference(Reference refer, XYZ point)
-        {
-            Category pipe = Category.GetCategory(_doc, BuiltInCategory.OST_PipeCurves);
-            Category duct = Category.GetCategory(_doc, BuiltInCategory.OST_DuctCurves);
-            Category conduit = Category.GetCategory(_doc, BuiltInCategory.OST_Conduit);
-            Category tray = Category.GetCategory(_doc, BuiltInCategory.OST_CableTray);
-            var elem = this._doc.GetElement(refer);
-            if (elem != null && elem is RevitLinkInstance link)
-            {
-                var linkElem = link.GetLinkDocument().GetElement(refer.LinkedElementId);
-                if (linkElem.Category.Id == pipe.Id)
-                {
-                    return true;
-                }
-                else if (linkElem.Category.Id == duct.Id)
-                {
-                    return true;
-                }
-                else if (linkElem.Category.Id == conduit.Id)
-                {
-                    return true;
-                }
-                else if (linkElem.Category.Id == tray.Id)
-                {
-                    return true;
-                }
-            }
-            else
-            {
-                if (elem.Category.Id == pipe.Id)
-                {
-                    return true;
-                }
-                else if (elem.Category.Id == duct.Id)
-                {
-                    return true;
-                }
-                else if (elem.Category.Id == conduit.Id)
-                {
-                    return true;
-                }
-                else if (elem.Category.Id == tray.Id)
-                {
-                    return true;
-                }
-            }
-            return false;
-        }
-    }
+
 }

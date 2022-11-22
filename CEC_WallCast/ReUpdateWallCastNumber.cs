@@ -19,7 +19,7 @@ namespace CEC_WallCast
     {
         public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elements)
         {
-            DisplayUnitType unitType = DisplayUnitType.DUT_MILLIMETERS;
+            //DisplayUnitType unitType = DisplayUnitType.DUT_MILLIMETERS;
             try
             {
                 UIApplication uiapp = commandData.Application;

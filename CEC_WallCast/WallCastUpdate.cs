@@ -18,7 +18,11 @@ namespace CEC_WallCast
     [Autodesk.Revit.Attributes.Transaction(Autodesk.Revit.Attributes.TransactionMode.Manual)]
     class WallCastUpdate : IExternalCommand
     {
+#if RELEASE2019
         public static DisplayUnitType unitType = DisplayUnitType.DUT_MILLIMETERS;
+#else
+        public static ForgeTypeId unitType = UnitTypeId.Millimeters;
+#endif
         public static List<Transform> usefulLinkTrans = new List<Transform>();
         public static string errorOutput = "";
         public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elements)
@@ -370,7 +374,12 @@ namespace CEC_WallCast
                     outterDiameter = inst.Symbol.LookupParameter("管外直徑").AsDouble();
                     castDiameter = outterDiameter / 2;
                 }
-                double castHeight = inst.LookupParameter("偏移").AsDouble() + castDiameter; //COP
+#if RELEASE2019
+                Parameter pa = inst.get_Parameter(BuiltInParameter.FLOOR_HEIGHTABOVELEVEL_PARAM);
+#else
+                Parameter pa = inst.get_Parameter(BuiltInParameter.FLOOR_HEIGHTABOVELEVEL_PARAM);
+#endif
+                double castHeight = pa.AsDouble() + castDiameter; //COP
 
                 //設定BBOP、BCOP、BTOP (牆只需要設定從底部開始的參數)
                 Parameter BBOP = inst.LookupParameter("BBOP");
@@ -652,17 +661,20 @@ namespace CEC_WallCast
                 Wall wall = linkedWall as Wall;
                 LocationCurve wallLocate = linkedWall.Location as LocationCurve;
                 Curve beamCurve = wallLocate.Curve;
+                beamCurve = beamCurve.CreateTransformed(toTrans);
                 XYZ startPoint = beamCurve.GetEndPoint(0);
                 XYZ endPoint = beamCurve.GetEndPoint(1);
                 startPoint = TransformPoint(startPoint, toTrans);
                 endPoint = TransformPoint(endPoint, toTrans);
                 endPoint = new XYZ(endPoint.X, endPoint.Y, startPoint.Z);
                 Line tempCrv = Line.CreateBound(startPoint, endPoint);
+                //IntersectionResult result = beamCurve.Project(castPt);
 
                 LocationPoint castLocate = elem.Location as LocationPoint;
                 XYZ castPt = castLocate.Point;
                 XYZ tempPt = new XYZ(castPt.X, castPt.Y, startPoint.Z);
-                IntersectionResult intersectResult = tempCrv.Project(castPt);
+                //IntersectionResult intersectResult = tempCrv.Project(castPt);
+                IntersectionResult intersectResult = beamCurve.Project(castPt);
                 XYZ targetPoint = intersectResult.XYZPoint;
                 targetPoint = new XYZ(targetPoint.X, targetPoint.Y, castPt.Z);
                 XYZ positionChange = targetPoint - castPt;
@@ -671,14 +683,18 @@ namespace CEC_WallCast
                 Parameter instLenPara = inst.LookupParameter("開口長");
 
                 //先調整位置
-                if (!castPt.IsAlmostEqualTo(targetPoint))
+                if (elem.Pinned == true)
+                {
+                    errorOutput += $"注意，ID為 {elem.Id} 的套管被固定無法移動，請檢查是否為有意不想移動之元素!\n";
+                }
+                if (!castPt.IsAlmostEqualTo(targetPoint) && elem.Pinned == false)
                 {
                     ElementTransformUtils.MoveElement(document, inst.Id, positionChange);
-                }
-                //在調整長度
-                if (instLenPara.AsDouble() <= wall.Width)
-                {
-                    instLenPara.Set(castLength_toSet);
+                    //再調整長度
+                    if (instLenPara.AsDouble() <= wall.Width)
+                    {
+                        instLenPara.Set(castLength_toSet);
+                    }
                 }
                 updateCast = inst;
             }

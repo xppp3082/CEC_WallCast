@@ -1,20 +1,21 @@
-﻿using System;
-using System.Diagnostics;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿#region Namespaces
+using Autodesk.Revit.ApplicationServices;
+using Autodesk.Revit.Attributes;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using Autodesk.Revit.UI.Selection;
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using Autodesk.Revit.DB.Structure;
 using System.Windows.Forms;
+#endregion
 
 namespace CEC_WallCast
 {
     [Autodesk.Revit.Attributes.Transaction(Autodesk.Revit.Attributes.TransactionMode.Manual)]
-    class CreateRectWallCast : IExternalCommand
+    class CreateRectWallCastLink : IExternalCommand
     {
 #if RELEASE2019
         public static DisplayUnitType unitType = DisplayUnitType.DUT_MILLIMETERS;
@@ -33,39 +34,60 @@ namespace CEC_WallCast
                     Autodesk.Revit.ApplicationServices.Application app = uiapp.Application;
                     Document doc = uidoc.Document;
 
-                    //拿到管元件
-                    ISelectionFilter pipeFilter = new PipeSelectionFilter(doc);
-                    Reference pickPipeRef = uidoc.Selection.PickObject(ObjectType.Element, pipeFilter, "請選擇貫穿牆的管");
-                    Element pickPipe = doc.GetElement(pickPipeRef.ElementId);
-                    //拿到整份牆外參檔&Transform
+                    //拿到外參管元件
+                    ISelectionFilter linkpipeFilter = new linkedPipeSelectionFilter(doc);
+                    Reference refer = uidoc.Selection.PickObject(ObjectType.LinkedElement, linkpipeFilter, "請選擇貫穿牆的「連結模型」管");
+                    RevitLinkInstance pipeLinkedInst = doc.GetElement(refer.ElementId) as RevitLinkInstance;
+                    Transform pipeLinkedTrans = pipeLinkedInst.GetTotalTransform();
+                    Element linkedPipe = pipeLinkedInst.GetLinkDocument().GetElement(refer.LinkedElementId);
+
+                    //拿到整份外參牆&Transform
                     ISelectionFilter linkedWallFilter = new WallSelectionFilter(doc);
-                    Reference pickWallRef = uidoc.Selection.PickObject(ObjectType.LinkedElement, linkedWallFilter, "請選擇貫穿的牆");
+                    Reference pickWallRef = uidoc.Selection.PickObject(ObjectType.LinkedElement, linkedWallFilter, "請選擇「連結模型」中被貫穿的牆");
                     RevitLinkInstance pickWall = doc.GetElement(pickWallRef) as RevitLinkInstance;
                     Transform linkTransform = pickWall.GetTotalTransform();
 
-                    //拿到實際要用的那道牆元件
                     Element linkedWall = pickWall.GetLinkDocument().GetElement(pickWallRef.LinkedElementId);
                     Wall wall = linkedWall as Wall;
                     double holeLength = UnitUtils.ConvertFromInternalUnits(wall.Width, unitType) + 20;
                     LocationCurve wallLocate = linkedWall.Location as LocationCurve;
                     Line wallLine = wallLocate.Curve as Line;
-                    XYZ wallDir = wallLine.Direction;
-                    XYZ wallNorDir = wallDir.CrossProduct(XYZ.BasisZ).Normalize().Negate();
+                    XYZ wallDir = wallLine.Direction.Normalize();
+                    XYZ wallNorDir = wallDir.CrossProduct(XYZ.BasisZ).Normalize().Negate(); //這段要再看一下
                     XYZ holeDir = XYZ.BasisY;
                     double angle = holeDir.AngleTo(wallNorDir);
 
-
-                    MEPCurve pipeCrv = pickPipe as MEPCurve;
-                    LocationCurve pipeLocate = pipeCrv.Location as LocationCurve;
+                    //1.擷取每支管和這道牆的交界點
+                    MEPCurve linkPipeCrv = linkedPipe as MEPCurve;
+                    LocationCurve pipeLocate = linkPipeCrv.Location as LocationCurve;
                     Curve pipeCurve = pipeLocate.Curve;
-                    Level level = pipeCrv.ReferenceLevel; //取得管線的參考樓層
-                    double elevation = level.Elevation;
-                    XYZ HoleLocation = GetHoleLocation(linkedWall, pickPipe, linkTransform);
+                    //Level pipeLevel = doc.GetElement(linkPipeCrv.ReferenceLevel.Id) as Level;
+                    Level pipeLevel = null;
+                    if (pipeLevel == null)
+                    {
+                        string LevelName = linkPipeCrv.ReferenceLevel.Name;
+                        FilteredElementCollector levelFilter = new FilteredElementCollector(doc).OfClass(typeof(Level));
+                        foreach (Level le in levelFilter)
+                        {
+                            if (le.Name == LevelName)
+                            {
+                                pipeLevel = le;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        MessageBox.Show("請確認「連結模型」中的樓層命名原則是否和本機端一致");
+                        return Result.Failed;
+                    }
+                    double elevation = pipeLevel.ProjectElevation;
+                    XYZ HoleLocation = GetHoleLocation(linkedWall, linkedPipe, linkTransform);
                     if (HoleLocation == null)
                     {
-                        MessageBox.Show("管沒有和任何的牆交集，請重新調整!");
+                        MessageBox.Show("執行失敗，請確認選中的管是否都有和牆交集!");
+                        return Result.Failed;
                     }
-
+                    double castLength = UnitUtils.ConvertToInternalUnits(holeLength, unitType);
                     Family Wall_Cast;
                     FamilyInstance instance = null;
                     using (Transaction tx = new Transaction(doc))
@@ -74,20 +96,19 @@ namespace CEC_WallCast
                         Wall_Cast = new RectWallCast().WallCastSymbol(doc);
                         tx.Commit();
                     }
-                    #region 放置穿牆套管開始
                     using (Transaction trans = new Transaction(doc))
                     {
                         trans.Start("放置穿牆套管");
                         if (HoleLocation != null)
                         {
-                            FamilySymbol CastSymbol2 = new RectWallCast().findWall_CastSymbol(doc, Wall_Cast, pickPipe);
-                            Parameter pipeWidth= getPipeWidth(pickPipe);
-                            Parameter pipeHigh = getPipeHeight(pickPipe);
-                            instance = doc.Create.NewFamilyInstance(HoleLocation, CastSymbol2, level, StructuralType.NonStructural);
+                            FamilySymbol CastSymbol2 = new RectWallCast().findWall_CastSymbol(doc, Wall_Cast, linkedPipe);
+                            Parameter pipeWidth = getPipeWidth(linkedPipe);
+                            Parameter pipeHigh = getPipeHeight(linkedPipe);
+                            instance = doc.Create.NewFamilyInstance(HoleLocation, CastSymbol2, pipeLevel, StructuralType.NonStructural);
                             //參數檢查
                             List<string> paraNameToCheck = new List<string>()
                                 {
-                                   "開口寬","開口高","開口長","系統別","TTOP","TCOP","TBOP","BBOP","BCOP","BTOP"
+                                   "開口長","系統別","TTOP","TCOP","TBOP","BBOP","BCOP","BTOP"
                                 };
 
                             foreach (string item in paraNameToCheck)
@@ -98,13 +119,14 @@ namespace CEC_WallCast
                                     return Result.Failed;
                                 }
                             }
+
                             //2022.05.13_新增：針對具有斜率的管材，計算對應的偏移值
                             double slopeOffset = 0.0;
-                            Parameter pipeSlope = pickPipe.LookupParameter("斜度");
+                            Parameter pipeSlope = linkedPipe.LookupParameter("斜度");
                             if (pipeSlope != null && pipeSlope.AsDouble() != 0)
                             {
-                                double pipeStartHeight = pickPipe.get_Parameter(BuiltInParameter.RBS_START_OFFSET_PARAM).AsDouble();
-                                double pipeEndHeight = pickPipe.get_Parameter(BuiltInParameter.RBS_END_OFFSET_PARAM).AsDouble();
+                                double pipeStartHeight = linkedPipe.get_Parameter(BuiltInParameter.RBS_START_OFFSET_PARAM).AsDouble();
+                                double pipeEndHeight = linkedPipe.get_Parameter(BuiltInParameter.RBS_END_OFFSET_PARAM).AsDouble();
                                 XYZ startPt = pipeCurve.GetEndPoint(0);
                                 XYZ endPt = pipeCurve.GetEndPoint(1);
                                 double distToStart = HoleLocation.DistanceTo(startPt);
@@ -117,12 +139,12 @@ namespace CEC_WallCast
                                     slopeOffset = distToStart * pipeSlope.AsDouble();
                                 }
                             }
-
                             double castOffset = UnitUtils.ConvertToInternalUnits(100, unitType);
                             double heightToSet = pipeHigh.AsDouble() + castOffset;
                             double widthToSet = pipeWidth.AsDouble() + castOffset;
                             instance.LookupParameter("開口高").Set(heightToSet);
                             instance.LookupParameter("開口寬").Set(widthToSet);
+
 
                             //調整高度與長度
                             double castDiameter = heightToSet / 2;
@@ -130,9 +152,8 @@ namespace CEC_WallCast
                             //MessageBox.Show(UnitUtils.ConvertFromInternalUnits(heightToSet, unitType).ToString());
                             //MessageBox.Show(UnitUtils.ConvertFromInternalUnits(castDiameter, unitType).ToString());
                             //double pipeHeight = pickPipe.LookupParameter("偏移").AsDouble();
-                            double pipeHeight = pickPipe.get_Parameter(BuiltInParameter.RBS_OFFSET_PARAM).AsDouble();
+                            double pipeHeight = linkedPipe.get_Parameter(BuiltInParameter.RBS_OFFSET_PARAM).AsDouble();
                             instance.get_Parameter(BuiltInParameter.INSTANCE_FREE_HOST_OFFSET_PARAM).Set(pipeHeight - castDiameter + slopeOffset);
-                            double castLength = UnitUtils.ConvertToInternalUnits(holeLength, unitType);
                             instance.LookupParameter("開口長").Set(castLength);
                             LocationPoint loPoint = instance.Location as LocationPoint;
                             XYZ newPoint = new XYZ(HoleLocation.X, HoleLocation.Y, HoleLocation.Z + 10);
@@ -162,7 +183,7 @@ namespace CEC_WallCast
                                 Level le = level_List[i] as Level;
                                 levelNames.Add(le.Name);
                             }
-                            int index_lowLevel = levelNames.IndexOf(level.Name);
+                            int index_lowLevel = levelNames.IndexOf(pipeLevel.Name);
                             int index_topLevel = index_lowLevel + 1;
                             Level topLevel = null;
                             if (index_topLevel < level_List.Count())
@@ -174,21 +195,13 @@ namespace CEC_WallCast
                                 message = "管的上方沒有樓層，無法計算穿牆套管偏移值";
                                 return Result.Failed;
                             }
-                            double basicWallHeight = topLevel.Elevation - level.Elevation;
+                            double basicWallHeight = topLevel.Elevation - pipeLevel.Elevation;
                             double BBOP_toSet = pipeHeight - outterDiameter / 2;
                             double BCOP_toSet = pipeHeight;
                             double BTOP_toSet = pipeHeight + outterDiameter / 2;
                             double TCOP_toSet = basicWallHeight - BCOP_toSet;
                             double TBOP_toSet = TCOP_toSet + outterDiameter / 2;
                             double TTOP_toSet = TCOP_toSet - outterDiameter / 2;
-                            #region 早期算法，連同降板一起計算
-                            //double BBOP_toSet = pipeHeight - wallBaseOffset - outterDiameter / 2;
-                            //double BCOP_toSet = pipeHeight - wallBaseOffset;
-                            //double BTOP_toSet = pipeHeight - wallBaseOffset + outterDiameter / 2;
-                            //double TCOP_toSet = wallHeight - BCOP_toSet;
-                            //double TBOP_toSet = TCOP_toSet + outterDiameter / 2;
-                            //double TTOP_toSet = TCOP_toSet - outterDiameter / 2;
-                            #endregion
                             BBOP.Set(BBOP_toSet);
                             BCOP.Set(BCOP_toSet);
                             BTOP.Set(BTOP_toSet);
@@ -198,7 +211,6 @@ namespace CEC_WallCast
                         }
                         trans.Commit();
                     }
-                    #endregion 
                 }
                 catch
                 {
@@ -223,7 +235,8 @@ namespace CEC_WallCast
         public double sortLevelbyHeight(Element element)
         {
             Level tempLevel = element as Level;
-            double levelHeight = element.LookupParameter("立面").AsDouble();
+            double levelHeight = element.get_Parameter(BuiltInParameter.LEVEL_ELEV).AsDouble();
+            //double levelHeight = element.LookupParameter("立面").AsDouble();
             return levelHeight;
         }
         public Solid singleSolidFromElement(Element element)
@@ -323,54 +336,6 @@ namespace CEC_WallCast
                 targetPara = element.get_Parameter(BuiltInParameter.RBS_CABLETRAY_HEIGHT_PARAM);
             }
             return targetPara;
-        }
-
-    }
-    public class RectWallCast
-    {
-        #region
-        //將穿牆套管的功能做成class管理
-        //1.先找到套管的Family
-        //2.用Family反查Symbol
-        #endregion
-        public Family WallCastSymbol(Document doc)
-        {
-            string internalNameWall = "CEC-穿牆開口-方";
-            Family Wall_CastType = null;
-            ElementFilter Wall_CastCategoryFilter = new ElementCategoryFilter(BuiltInCategory.OST_PipeAccessory);
-            ElementFilter Wall_CastSymbolFilter = new ElementClassFilter(typeof(FamilySymbol));
-
-            LogicalAndFilter andFilter = new LogicalAndFilter(Wall_CastCategoryFilter, Wall_CastSymbolFilter);
-            FilteredElementCollector RC_CastSymbol = new FilteredElementCollector(doc);
-            RC_CastSymbol = RC_CastSymbol.WherePasses(andFilter);//這地方有點怪，無法使用andFilter RC_CastSymbolFilter
-            bool symbolFound = false;
-            foreach (FamilySymbol e in RC_CastSymbol)
-            {
-                Parameter p = e.LookupParameter("API識別名稱");
-                if (p != null && p.AsString().Contains(internalNameWall))
-                {
-                    symbolFound = true;
-                    Wall_CastType = e.Family;
-                    break;
-                }
-            }
-            if (!symbolFound)
-            {
-                MessageBox.Show("尚未載入指定的穿牆套管元件!");
-            }
-            return Wall_CastType;
-        }
-        public FamilySymbol findWall_CastSymbol(Document doc, Family CastFamily, Element element)
-        {
-            FamilySymbol targetFamilySymbol = null; //用來找目標familySymbol
-            if (CastFamily != null)
-            {
-                //因為方形是通用類型的關係，直接找到第一個就可以返回
-                FamilySymbol tempSymbol = doc.GetElement(CastFamily.GetFamilySymbolIds().First()) as FamilySymbol;
-                targetFamilySymbol = tempSymbol;
-            }
-            targetFamilySymbol.Activate();
-            return targetFamilySymbol;
         }
     }
 }

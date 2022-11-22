@@ -17,7 +17,11 @@ namespace CEC_WallCast
     [Autodesk.Revit.Attributes.Transaction(Autodesk.Revit.Attributes.TransactionMode.Manual)]
     public class CreateWallCast : IExternalCommand
     {
+#if RELEASE2019
         public static DisplayUnitType unitType = DisplayUnitType.DUT_MILLIMETERS;
+#else
+        public static ForgeTypeId unitType = UnitTypeId.Millimeters;
+#endif
         public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elements)
         {
             try

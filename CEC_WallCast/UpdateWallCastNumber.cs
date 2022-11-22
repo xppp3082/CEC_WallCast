@@ -19,7 +19,6 @@ namespace CEC_WallCast
     {
         public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elements)
         {
-            DisplayUnitType unitType = DisplayUnitType.DUT_MILLIMETERS;
             try
             {
                 #region 邏輯解釋
