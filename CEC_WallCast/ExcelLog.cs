@@ -20,35 +20,36 @@ namespace CEC_WallCast
     }
     public class ExcelLog
     {
-        private Document _doc;
-        private string _filePath;
+        //private string _filePath;
+        //private string _fileName;
         private int _userCount;
-        private string _fileName;
+
         public enum ribbons
         {
-            autohanger = 1,
+            autoHanger = 1,
             beamCast = 2,
             wallCast = 3,
             blockTrans = 4,
             perFab = 5
         }
-        public ExcelLog(Document doc, string filePath, int count)
+        public ExcelLog(int count)
         {
-            this._doc = doc;
-            this._filePath = filePath;
+            //this._filePath = filePath;
             this._userCount = count;
         }
         //建立Enum匹配Ribbon Name
         public void userLog()
         {
             //根據不同支外掛寫入不同excel
+            string name = ribbons.wallCast.ToString();
+            int ad = 1;//格式校正
             string userName = Environment.UserName;
-            string fileName = userName + "_" + ribbons.wallCast.ToString() + ".xls";
+            string fileName = userName + ".xls";
+            string ribbonName = ribbons.wallCast.ToString();
 
             int startYear = 2021;//開始紀錄的前一年
             int year = DateTime.Today.Year;
-            int month = DateTime.Today.Month;
-            //string ribbonName = "autoHanger";
+            int month = DateTime.Today.Month + ad;
 
             //寫入Excel
             DateTime toDay = DateTime.Today.Date;
@@ -59,20 +60,15 @@ namespace CEC_WallCast
             if (!File.Exists(jsonPath)) jsonPath = Path.Combine(Environment.GetEnvironmentVariable("AppData"), infoPath);
             if (!File.Exists(jsonPath)) throw new Exception("請安裝並登入Dropbox桌面應用程式!");
             var dropboxPath = File.ReadAllText(jsonPath).Split('\"')[5];
-            MessageBox.Show(dropboxPath);
-            var filePath = @"\BIM\05 Common 共通\Source\Revit外掛\CEC MEP\00.Journal logs\";
+            //var filePath = @"\BIM\05 Common 共通\Source\Revit外掛\CEC MEP\00.Journal logs\";
             string filepath = @"N:\CEC_API\logs\";
-            /* string filepath = @"C:\Users\12061753\Documents\"*/
-            ;
-            //string finalPath = dropboxPath + @"\" + fileName;
-            //string targetPath = dropboxPath + filePath + fileName;
             string finalPath = filepath + fileName;
-            //string finalPath =/* dropboxPath + */filepath + fileName;
             Excel.Workbook excelWorkbook = null;
             Excel.Worksheet excelWorksheet = null;
             //利用DateTime判斷寫入資料的欄位是否要變更
-            int columNum = year - startYear;
+            int columNum = year - startYear + ad;
             bool fileExist = false;
+            bool sheetExist = false;
             try
             {
                 if (excelApp != null)
@@ -85,41 +81,48 @@ namespace CEC_WallCast
                         excelWorkbook = excelApp.Workbooks.Open(finalPath);
                         foreach (Excel.Worksheet sheet in excelWorkbook.Worksheets)
                         {
-                            //if (sheet.Name == year.ToString())
-                            //如果Excelsheet已存在
-                            if (sheet.Name == userName)
+                            if (sheet.Name == ribbonName)
                             {
-
+                                sheetExist = true;
                                 excelWorksheet = sheet;
-                                //把資料寫進相對的workbook
-                                excelWorksheet.Cells[1, columNum] = year.ToString();
-                                //必須針對這個判斷時否有值
-                                var cell = excelWorksheet.Cells[month, columNum] as Excel.Range;
-                                var cellValue = 0;
-                                if (cell.Value == null)
-                                {
-                                    cellValue = 0;
-                                }
-                                else
-                                {
-                                    cellValue = (int)(excelWorksheet.Cells[month, columNum] as Excel.Range).Value;
-                                }
-                                excelWorksheet.Cells[month, columNum] = cellValue + _userCount;
+                            }
+                        }
+                        //if (sheet.Name == year.ToString())
+                        //如果Excelsheet已存在
+                        if (sheetExist == true)
+                        {
+                            //把資料寫進相對的workbook
+                            excelWorksheet.Cells[1, columNum] = year.ToString() + "年";
+                            //必須針對這個判斷時否有值
+                            var cell = excelWorksheet.Cells[month, columNum] as Excel.Range;
+                            var cellValue = 0;
+                            if (cell.Value == null)
+                            {
+                                cellValue = 0;
                             }
                             else
                             {
-                                excelWorksheet = new Excel.Worksheet();
-                                //excelWorkbook.Worksheets.Add();
-                                int worksheetsNum = excelWorkbook.Worksheets.Count;
-                                excelWorksheet = excelWorkbook.Worksheets[1];
-                                //excelWorksheet = excelWorkbook.Worksheets.Add();
-                                excelWorksheet.Name = userName;
-                                //excelWorksheet.Name = year.ToString();
-                                //建立一個新的以年份為基礎的workbook
-                                //把資料寫進相對的sheet
-                                excelWorksheet.Cells[1, columNum] = year.ToString();
-                                excelWorksheet.Cells[month, columNum] = _userCount;
+                                cellValue = (int)(excelWorksheet.Cells[month, columNum] as Excel.Range).Value;
                             }
+                            excelWorksheet.Cells[month, columNum] = cellValue + _userCount;
+                        }
+                        else
+                        {
+                            excelWorksheet = new Excel.Worksheet();
+                            //excelWorkbook.Worksheets.Add();
+                            int worksheetsNum = excelWorkbook.Worksheets.Count;
+                            excelWorksheet = excelWorkbook.Worksheets[1];
+                            //excelWorksheet = excelWorkbook.Worksheets.Add();
+                            excelWorksheet.Name = userName;
+                            //excelWorksheet.Name = year.ToString();
+                            //建立一個新的以年份為基礎的workbook
+                            //把資料寫進相對的sheet
+                            for (int i = 1; i <= 12; i++)
+                            {
+                                excelWorksheet.Cells[i + 1, 1] = $"{i}月";
+                            }
+                            excelWorksheet.Cells[1, columNum] = year.ToString() + "年";
+                            excelWorksheet.Cells[month, columNum] = _userCount;
                         }
                     }
                     else
@@ -130,7 +133,11 @@ namespace CEC_WallCast
                         excelWorksheet = new Excel.Worksheet();
                         excelWorksheet = excelWorkbook.Worksheets[1];
                         excelWorksheet.Name = userName;
-                        excelWorksheet.Cells[1, columNum] = year.ToString();
+                        for (int i = 1; i <= 12; i++)
+                        {
+                            excelWorksheet.Cells[i + 1, 1] = $"{i}月";
+                        }
+                        excelWorksheet.Cells[1, columNum] = year.ToString() + "年";
                         excelWorksheet.Cells[month, columNum] = _userCount;
                     }
                     if (!fileExist)

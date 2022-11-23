@@ -32,6 +32,7 @@ namespace CEC_WallCast
             //2.蒐集所有的外參牆
             //3.更新穿牆套管與牆之間的關係
             //4.更新穿牆套管與管線間的關係
+            Counter.count += 1;
             System.Diagnostics.Stopwatch sw = new System.Diagnostics.Stopwatch();//引用stopwatch物件
             sw.Reset();//碼表歸零
             sw.Start();//碼表開始計時

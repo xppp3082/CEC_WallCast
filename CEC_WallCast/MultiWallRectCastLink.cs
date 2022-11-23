@@ -25,6 +25,7 @@ namespace CEC_WallCast
 #endif
         public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elements)
         {
+            Counter.count += 1;
             try
             {
                 UIApplication uiapp = commandData.Application;

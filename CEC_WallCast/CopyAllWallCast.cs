@@ -24,6 +24,7 @@ namespace CEC_WallCast
 #endif
         public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elements)
         {
+            Counter.count += 1;
             string messageOut = "";
             int copyNum = 0;
             try

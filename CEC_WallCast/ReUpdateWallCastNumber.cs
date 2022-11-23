@@ -19,6 +19,7 @@ namespace CEC_WallCast
     {
         public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elements)
         {
+            Counter.count += 1;
             //DisplayUnitType unitType = DisplayUnitType.DUT_MILLIMETERS;
             try
             {

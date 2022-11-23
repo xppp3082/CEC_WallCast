@@ -25,6 +25,7 @@ namespace CEC_WallCast
         {
             while (true)
             {
+                Counter.count += 1;
                 try
                 {
                     //準備東西
