@@ -52,31 +52,38 @@ namespace CEC_WallCast
                     Wall wall = linkedWall as Wall;
                     double holeLength = UnitUtils.ConvertFromInternalUnits(wall.Width, unitType) + 20;
                     LocationCurve wallLocate = linkedWall.Location as LocationCurve;
-                    Line wallLine = wallLocate.Curve as Line;
-                    XYZ wallDir = wallLine.Direction.Normalize();
-                    XYZ wallNorDir = wallDir.CrossProduct(XYZ.BasisZ).Normalize().Negate(); //這段要再看一下
+                    Curve wallCrv = wallLocate.Curve;
+                    wallCrv = wallCrv.CreateTransformed(linkTransform);
+                    Line wallLine = wallCrv as Line;
+                    double angle = 0.0;
+                    bool isLiner = false;
                     XYZ holeDir = XYZ.BasisY;
-                    double angle = holeDir.AngleTo(wallNorDir);
-
+                    if (wallLine != null)
+                    {
+                        isLiner = true;
+                        XYZ wallDir = wallLine.Direction.Normalize();
+                        XYZ wallNorDir = wallDir.CrossProduct(XYZ.BasisZ).Normalize().Negate(); //這段要再看一下
+                        angle = holeDir.AngleTo(wallNorDir);
+                    }
                     //1.擷取每支管和這道牆的交界點
                     MEPCurve linkPipeCrv = linkedPipe as MEPCurve;
                     LocationCurve pipeLocate = linkPipeCrv.Location as LocationCurve;
                     Curve pipeCurve = pipeLocate.Curve;
                     //Level pipeLevel = doc.GetElement(linkPipeCrv.ReferenceLevel.Id) as Level;
+
                     Level pipeLevel = null;
-                    if (pipeLevel == null)
+                    string LevelName = linkPipeCrv.ReferenceLevel.Name;
+                    Level sourceLevel = linkPipeCrv.ReferenceLevel;
+                    FilteredElementCollector levelFilter = new FilteredElementCollector(doc).OfClass(typeof(Level));
+                    foreach (Level le in levelFilter)
                     {
-                        string LevelName = linkPipeCrv.ReferenceLevel.Name;
-                        FilteredElementCollector levelFilter = new FilteredElementCollector(doc).OfClass(typeof(Level));
-                        foreach (Level le in levelFilter)
+                        if (le.Name == LevelName || le.ProjectElevation == sourceLevel.ProjectElevation)
                         {
-                            if (le.Name == LevelName)
-                            {
-                                pipeLevel = le;
-                            }
+                            pipeLevel = le;
                         }
                     }
-                    else
+
+                    if (pipeLevel == null)
                     {
                         MessageBox.Show("請確認「連結模型」中的樓層命名原則是否和本機端一致");
                         return Result.Failed;
@@ -87,6 +94,14 @@ namespace CEC_WallCast
                     {
                         MessageBox.Show("執行失敗，請確認選中的管是否都有和牆交集!");
                         return Result.Failed;
+                    }
+                    //如果牆不為曲線，須單獨設定，計算曲線導數作為旋轉依據
+                    if (isLiner != true)
+                    {
+                        IntersectionResult intersect = wallCrv.Project(HoleLocation);
+                        Transform ptTrans = wallCrv.ComputeDerivatives(intersect.Parameter, false);
+                        XYZ v = ptTrans.BasisY;
+                        angle = holeDir.AngleTo(v);
                     }
                     double castLength = UnitUtils.ConvertToInternalUnits(holeLength, unitType);
                     Family Wall_Cast;

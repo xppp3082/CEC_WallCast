@@ -83,6 +83,16 @@ namespace CEC_WallCast.Properties {
         /// <summary>
         ///   查詢類型 System.Drawing.Bitmap 的當地語系化資源。
         /// </summary>
+        internal static System.Drawing.Bitmap 穿牆套管ICON合集_局部更新_svg {
+            get {
+                object obj = ResourceManager.GetObject("穿牆套管ICON合集_局部更新_svg", resourceCulture);
+                return ((System.Drawing.Bitmap)(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   查詢類型 System.Drawing.Bitmap 的當地語系化資源。
+        /// </summary>
         internal static System.Drawing.Bitmap 穿牆套管ICON合集_放置_svg {
             get {
                 object obj = ResourceManager.GetObject("穿牆套管ICON合集_放置_svg", resourceCulture);

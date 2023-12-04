@@ -49,12 +49,19 @@ namespace CEC_WallCast
                     Wall wall = linkedWall as Wall;
                     double holeLength = UnitUtils.ConvertFromInternalUnits(wall.Width, unitType) + 20;
                     LocationCurve wallLocate = linkedWall.Location as LocationCurve;
-                    Line wallLine = wallLocate.Curve as Line;
-                    XYZ wallDir = wallLine.Direction;
-                    XYZ wallNorDir = wallDir.CrossProduct(XYZ.BasisZ).Normalize().Negate();
+                    Curve wallCrv = wallLocate.Curve;
+                    wallCrv = wallCrv.CreateTransformed(linkTransform);
+                    Line wallLine = wallCrv as Line;
+                    double angle = 0.0;
+                    bool isLiner = false;
                     XYZ holeDir = XYZ.BasisY;
-                    double angle = holeDir.AngleTo(wallNorDir);
-
+                    if (wallLine != null)
+                    {
+                        isLiner = true;
+                        XYZ wallDir = wallLine.Direction;
+                        XYZ wallNorDir = wallDir.CrossProduct(XYZ.BasisZ).Normalize().Negate();
+                        angle = holeDir.AngleTo(wallNorDir);
+                    }
 
                     MEPCurve pipeCrv = pickPipe as MEPCurve;
                     LocationCurve pipeLocate = pipeCrv.Location as LocationCurve;
@@ -65,6 +72,14 @@ namespace CEC_WallCast
                     if (HoleLocation == null)
                     {
                         MessageBox.Show("管沒有和任何的牆交集，請重新調整!");
+                    }
+                    //如果牆不為曲線，須單獨設定，計算曲線導數作為旋轉依據
+                    if (isLiner != true)
+                    {
+                        IntersectionResult intersect = wallCrv.Project(HoleLocation);
+                        Transform ptTrans = wallCrv.ComputeDerivatives(intersect.Parameter, false);
+                        XYZ v = ptTrans.BasisY;
+                        angle = holeDir.AngleTo(v);
                     }
 
                     Family Wall_Cast;
@@ -82,7 +97,7 @@ namespace CEC_WallCast
                         if (HoleLocation != null)
                         {
                             FamilySymbol CastSymbol2 = new RectWallCast().findWall_CastSymbol(doc, Wall_Cast, pickPipe);
-                            Parameter pipeWidth= getPipeWidth(pickPipe);
+                            Parameter pipeWidth = getPipeWidth(pickPipe);
                             Parameter pipeHigh = getPipeHeight(pickPipe);
                             instance = doc.Create.NewFamilyInstance(HoleLocation, CastSymbol2, level, StructuralType.NonStructural);
                             //參數檢查

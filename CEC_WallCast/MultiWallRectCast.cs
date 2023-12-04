@@ -45,7 +45,7 @@ namespace CEC_WallCast
                 }
                 IList<Reference> linkedPickPipeRefs = uidoc.Selection.PickObjects(ObjectType.LinkedElement, linkedPipeFilter, "請選擇「連結模型」中貫穿牆的管(選填)");
                 //string output = "";
-                foreach(Reference refer in linkedPickPipeRefs)
+                foreach (Reference refer in linkedPickPipeRefs)
                 {
                     RevitLinkInstance pipeLinkedInst = doc.GetElement(refer.ElementId) as RevitLinkInstance;
                     Transform pipeLinkedTransform = pipeLinkedInst.GetTotalTransform();
@@ -64,13 +64,26 @@ namespace CEC_WallCast
                 Wall wall = linkedWall as Wall;
                 double holeLength = UnitUtils.ConvertFromInternalUnits(wall.Width, unitType) + 20;
                 LocationCurve wallLocate = linkedWall.Location as LocationCurve;
-                Line wallLine = wallLocate.Curve as Line;
-                XYZ wallDir = wallLine.Direction.Normalize();
-                XYZ wallNorDir = wallDir.CrossProduct(XYZ.BasisZ).Normalize().Negate(); //這段要再看一下
+                Curve wallCrv = wallLocate.Curve;
+                wallCrv = wallCrv.CreateTransformed(linkTransform);
+                Line wallLine = wallCrv as Line;
+                double angle = 0.0;
+                bool isLiner = false;
                 XYZ holeDir = XYZ.BasisY;
-                double angle = holeDir.AngleTo(wallNorDir);
-
-                //MessageBox.Show($"此牆向量為{Math.Round(wallDir.X, 2)} &{Math.Round(wallDir.Y, 2)}");
+                XYZ wallDir = new XYZ();
+                if (wallLine != null)
+                {
+                    isLiner = true;
+                    wallDir = wallLine.Direction.Normalize();
+                    XYZ wallNorDir = wallDir.CrossProduct(XYZ.BasisZ).Normalize().Negate();
+                    angle = holeDir.AngleTo(wallNorDir);
+                }
+                else
+                {
+                    //重新塑造牆的向量，但這做法有點問題
+                    Line tempLine = Line.CreateBound(wallCrv.GetEndPoint(0), wallCrv.GetEndPoint(1));
+                    wallDir = tempLine.Direction.Normalize();
+                }
 
                 //1.擷取每支管和這道牆的交界點
                 //2.找出最高的點&最低的點
@@ -81,7 +94,7 @@ namespace CEC_WallCast
                 Level level = pipeCrv.ReferenceLevel;//取得管線的參考樓層
                 if (level == null)
                 {
-                    level =doc.GetElement( doc.ActiveView.LevelId) as Level;
+                    level = doc.GetElement(doc.ActiveView.LevelId) as Level;
                 }
                 double elevation = level.ProjectElevation;
                 List<XYZ> intersectHeight = new List<XYZ>();
@@ -135,9 +148,18 @@ namespace CEC_WallCast
                 XYZ heightPt1 = intersectHeight.First();
                 XYZ heightPt2 = intersectHeight.Last();
                 XYZ targetPt = new XYZ((widthPt1.X + widthPt2.X) / 2, (widthPt1.Y + widthPt2.Y) / 2, (heightPt1.Z + heightPt2.Z) / 2 - elevation);
+                //如果牆不為曲線，須單獨設定，計算曲線導數作為旋轉依據
+                if (isLiner != true)
+                {
+                    IntersectionResult intersect = wallCrv.Project(targetPt);
+                    Transform ptTrans = wallCrv.ComputeDerivatives(intersect.Parameter, false);
+                    XYZ v = ptTrans.BasisY;
+                    angle = holeDir.AngleTo(v);
+                }
+
 
                 Family Wall_Cast;
-                FamilyInstance instance = null; 
+                FamilyInstance instance = null;
                 using (Transaction tx = new Transaction(doc))
                 {
                     tx.Start("載入檔案測試");

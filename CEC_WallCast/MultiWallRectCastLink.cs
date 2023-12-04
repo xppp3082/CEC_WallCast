@@ -33,7 +33,7 @@ namespace CEC_WallCast
                 Autodesk.Revit.ApplicationServices.Application app = uiapp.Application;
                 Document doc = uidoc.Document;
                 ISelectionFilter linkedPipeFilter = new linkedPipeSelectionFilter(doc);
-                IList<Reference> linkedPickPipeRefs = uidoc.Selection.PickObjects(ObjectType.LinkedElement, linkedPipeFilter, "請選擇「連結模型」中貫穿牆的管(選填)");
+                IList<Reference> linkedPickPipeRefs = uidoc.Selection.PickObjects(ObjectType.LinkedElement, linkedPipeFilter, "請選擇「連結模型」中貫穿牆的管");
                 List<Element> pickPipes = new List<Element>();
                 foreach (Reference refer in linkedPickPipeRefs)
                 {
@@ -53,30 +53,44 @@ namespace CEC_WallCast
                 Wall wall = linkedWall as Wall;
                 double holeLength = UnitUtils.ConvertFromInternalUnits(wall.Width, unitType) + 20;
                 LocationCurve wallLocate = linkedWall.Location as LocationCurve;
-                Line wallLine = wallLocate.Curve as Line;
-                XYZ wallDir = wallLine.Direction.Normalize();
-                XYZ wallNorDir = wallDir.CrossProduct(XYZ.BasisZ).Normalize().Negate(); //這段要再看一下
+                Curve wallCrv = wallLocate.Curve;
+                wallCrv = wallCrv.CreateTransformed(linkTransform);
+                Line wallLine = wallCrv as Line;
+                double angle = 0.0;
+                bool isLiner = false;
                 XYZ holeDir = XYZ.BasisY;
-                double angle = holeDir.AngleTo(wallNorDir);
-
+                XYZ wallDir = new XYZ();
+                if (wallLine != null)
+                {
+                    isLiner = true;
+                    wallDir = wallLine.Direction.Normalize();
+                    XYZ wallNorDir = wallDir.CrossProduct(XYZ.BasisZ).Normalize().Negate(); //這段要再看一下
+                    angle = holeDir.AngleTo(wallNorDir);
+                }
+                else
+                {
+                    //重新塑造牆的向量，但這做法有點問題
+                    Line tempLine = Line.CreateBound(wallCrv.GetEndPoint(0), wallCrv.GetEndPoint(1));
+                    wallDir = tempLine.Direction.Normalize();
+                }
                 MEPCurve linkPipeCrv = pickPipes.First() as MEPCurve;
                 LocationCurve pipeLocate = linkPipeCrv.Location as LocationCurve;
                 Curve pipeCurve = pipeLocate.Curve;
                 //取得管線的參考樓層，要因應外參管和本地端管因為樓層元素不一樣的狀況進行判斷
                 Level pipeLevel = null;
-                if (pipeLevel == null)
+
+                string LevelName = linkPipeCrv.ReferenceLevel.Name;
+                Level sourceLevel = linkPipeCrv.ReferenceLevel;
+                FilteredElementCollector levelFilter = new FilteredElementCollector(doc).OfClass(typeof(Level));
+                foreach (Level le in levelFilter)
                 {
-                    string LevelName = linkPipeCrv.ReferenceLevel.Name;
-                    FilteredElementCollector levelFilter = new FilteredElementCollector(doc).OfClass(typeof(Level));
-                    foreach (Level le in levelFilter)
+                    if (le.Name == LevelName || le.ProjectElevation ==sourceLevel.ProjectElevation)
                     {
-                        if (le.Name == LevelName)
-                        {
-                            pipeLevel = le;
-                        }
+                        pipeLevel = le;
                     }
                 }
-                else
+
+                if (pipeLevel == null)
                 {
                     MessageBox.Show("請確認「連結模型」中的樓層命名原則是否和本機端一致");
                     return Result.Failed;
@@ -129,6 +143,15 @@ namespace CEC_WallCast
                 XYZ heightPt1 = intersectHeight.First();
                 XYZ heightPt2 = intersectHeight.Last();
                 XYZ targetPt = new XYZ((widthPt1.X + widthPt2.X) / 2, (widthPt1.Y + widthPt2.Y) / 2, (heightPt1.Z + heightPt2.Z) / 2 - elevation);
+                //如果牆不為曲線，須單獨設定，計算曲線導數作為旋轉依據
+                if (isLiner != true)
+                {
+                    IntersectionResult intersect = wallCrv.Project(targetPt);
+                    Transform ptTrans = wallCrv.ComputeDerivatives(intersect.Parameter, false);
+                    XYZ v = ptTrans.BasisY;
+                    angle = holeDir.AngleTo(v);
+                }
+
 
                 Family Wall_Cast;
                 FamilyInstance instance = null;

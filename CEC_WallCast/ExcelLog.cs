@@ -41,7 +41,6 @@ namespace CEC_WallCast
         public void userLog()
         {
             //根據不同支外掛寫入不同excel
-            string name = ribbons.wallCast.ToString();
             int ad = 1;//格式校正
             string userName = Environment.UserName;
             string fileName = userName + ".xls";
@@ -108,12 +107,12 @@ namespace CEC_WallCast
                         }
                         else
                         {
-                            excelWorksheet = new Excel.Worksheet();
+                            //excelWorksheet = new Excel.Worksheet();
                             //excelWorkbook.Worksheets.Add();
-                            int worksheetsNum = excelWorkbook.Worksheets.Count;
-                            excelWorksheet = excelWorkbook.Worksheets[1];
-                            //excelWorksheet = excelWorkbook.Worksheets.Add();
-                            excelWorksheet.Name = userName;
+                            //int worksheetsNum = excelWorkbook.Worksheets.Count;
+                            //excelWorksheet = excelWorkbook.Worksheets[1];
+                            excelWorksheet = excelWorkbook.Worksheets.Add();
+                            excelWorksheet.Name = ribbonName;
                             //excelWorksheet.Name = year.ToString();
                             //建立一個新的以年份為基礎的workbook
                             //把資料寫進相對的sheet
@@ -132,7 +131,7 @@ namespace CEC_WallCast
                         excelWorkbook = excelApp.Workbooks.Add();
                         excelWorksheet = new Excel.Worksheet();
                         excelWorksheet = excelWorkbook.Worksheets[1];
-                        excelWorksheet.Name = userName;
+                        excelWorksheet.Name = ribbonName;
                         for (int i = 1; i <= 12; i++)
                         {
                             excelWorksheet.Cells[i + 1, 1] = $"{i}月";

@@ -16,9 +16,10 @@ using System.Threading;
 namespace CEC_WallCast
 {
     [Autodesk.Revit.Attributes.Transaction(Autodesk.Revit.Attributes.TransactionMode.Manual)]
-    class WallCastUpdate : IExternalCommand
+    class WallCastUpdatePart : IExternalCommand
     {
         //public static List<Transform> usefulLinkTrans = new List<Transform>();
+        //public static string errorOutput = "";
         public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elements)
         {
             //程式要做的事情
@@ -32,6 +33,7 @@ namespace CEC_WallCast
             System.Diagnostics.Stopwatch sw = new System.Diagnostics.Stopwatch();//引用stopwatch物件
             sw.Reset();//碼表歸零
             sw.Start();//碼表開始計時
+            int updateCount = 0;
             try
             {
                 //準備東西
@@ -41,7 +43,8 @@ namespace CEC_WallCast
                 Document doc = uidoc.Document;
 
                 //找到所有穿牆套管元件
-                List<FamilyInstance> famList = m.findTargetElements(doc);
+                List<FamilyInstance> famList = m.findTargetElementsPart(doc);
+                updateCount = famList.Count();
                 using (WallCastProgressUI progressView2 = new WallCastProgressUI(famList.Count))
                 {
                     List<string> usefulParaName = new List<string> { "開口長","BTOP", "BCOP", "BBOP", "TTOP", "TCOP", "TBOP",
@@ -65,9 +68,15 @@ namespace CEC_WallCast
                         Dictionary<ElementId, List<Element>> wallCastDict = m.getCastWallDict(doc);
                         int transCount = 0;
                         List<double> intersectVol = new List<double>();
-                        #region 2023.05.15新增，需針對沒有碰到牆的套管也更新其內容
+                        //foreach (Element e in famList)
+                        //{
+                        //    updateCastContent(doc, e);
+                        //}
+                        //foreach (ElementId id in wallCastDict.Keys)
                         foreach (Element e in famList)
                         {
+                            //問題思考：要如何針對差集的量體去做元件的排序，同時可以精確對應每到牆對應的transform
+                            //因為字典沒辦法再foreach迴圈結束前自己修改，所以必須要新增modifyWallLst
                             ElementId id = e.Id;
                             m.updateCastContent(doc, e);
                             if (!wallCastDict.Keys.Contains(e.Id))
@@ -75,32 +84,28 @@ namespace CEC_WallCast
                                 m.updateCastWithOutWall(e);
                             }
                             //}
-                            #endregion
-                            #region 原資訊更新方法
                             //foreach (ElementId id in wallCastDict.Keys)
-                            //{                         
+                            //{
                             else if (wallCastDict.Keys.Contains(e.Id))
                             {
-                                //問題思考：要如何針對差集的量體去做元件的排序，同時可以精確對應每到牆對應的transform
-                                //因為字典沒辦法再foreach迴圈結束前自己修改，所以必須要新增modifyWallLst
                                 List<Element> modifyWallLst = wallCastDict[id].OrderByDescending(x => m.calculateSolidVol(doc.GetElement(id), x, m.usefulLinkTrans[transCount])).ToList();
                                 int orginIndex = wallCastDict[id].IndexOf(modifyWallLst.First());
-
                                 m.updateCastWithWall(doc.GetElement(id), modifyWallLst.First());
-                                //updateCastContent(doc, doc.GetElement(id));
                                 //用來記錄transform的方法有點詭異，日後可能會出bug//(2022.08.09更新_利用原本的排序反查原本的orginIndex)
                                 m.modifyCastLen(doc.GetElement(id), modifyWallLst.First(), m.usefulLinkTrans[orginIndex]);
                                 transCount++;
                                 //以外參進行單位的更新進度顯示
                             }
                             if (progressView2.Update()) break;
-                            #endregion
                         }
+
                         //檢查所有的實做套管，如果不再Dictionary中，則表示其沒有穿牆
                         foreach (FamilyInstance inst in famList)
                         {
                             if (!wallCastDict.Keys.Contains(inst.Id))
                             {
+                                //inst.LookupParameter("干涉管數量").Set(0);
+                                //inst.LookupParameter("系統別").Set("SP");
                                 inst.LookupParameter("【原則】是否穿牆").Set("不符合");
                             }
                         }
@@ -115,111 +120,12 @@ namespace CEC_WallCast
             }
             sw.Stop();//碼錶停止
             double sec = Math.Round(sw.Elapsed.TotalMilliseconds / 1000, 2);
-            string output = $"穿牆套管資訊更新完成，共花費 {sec} 秒\n";
+            string output = $"穿牆套管資訊更新完成，共更新了視圖中的{updateCount}個牆開口，花費 {sec} 秒\n";
             MessageBox.Show(output + m.errorOutput);
             m.errorOutput = "";
             return Result.Succeeded;
         }
-        #region 已彙整至method中
-        //public bool checkPara(Element elem, string paraName)
-        //{
-        //    bool result = false;
-        //    foreach (Parameter parameter in elem.Parameters)
-        //    {
-        //        Parameter val = parameter;
-        //        if (val.Definition.Name == paraName)
-        //        {
-        //            result = true;
-        //        }
-        //    }
-        //    return result;
-        //}
-        //public List<RevitLinkInstance> findWallLinkInstance(Document doc)
-        //{
-        //    //找到擁有牆元件的外參
-        //    List<RevitLinkInstance> linkInstanceList = new List<RevitLinkInstance>();
-        //    FilteredElementCollector linkCollector = new FilteredElementCollector(doc).OfClass(typeof(RevitLinkInstance));
-        //    foreach (RevitLinkInstance linkInst in linkCollector)
-        //    {
-        //        Document linkDoc = linkInst.GetLinkDocument();
-        //        if (linkDoc != null)
-        //        {
-        //            FilteredElementCollector coll = new FilteredElementCollector(linkDoc).OfCategory(BuiltInCategory.OST_Walls).WhereElementIsNotElementType();
-        //            if (coll.Count() > 0) linkInstanceList.Add(linkInst);
-        //        }
-        //    }
-        //    return linkInstanceList;
-        //}
-        //public FilteredElementCollector getAllLinkedWall(Document linkedDoc)
-        //{
-        //    FilteredElementCollector beamCollector = new FilteredElementCollector(linkedDoc).OfClass(typeof(Wall));
-        //    beamCollector.WhereElementIsNotElementType();
-        //    return beamCollector;
-        //}
-        //public Dictionary<ElementId, List<Element>> getCastWallDict(Document doc)
-        //{
-        //    //蒐集套管與牆的關係
-        //    Dictionary<ElementId, List<Element>> castWallDict = new Dictionary<ElementId, List<Element>>();
-        //    try
-        //    {
-        //        //蒐集檔案中實做的牆套管
-        //        List<FamilyInstance> familyInstances = method.findTargetElements(doc);
-        //        List<RevitLinkInstance> linkWallInstances = findWallLinkInstance(doc);
-        //        Transform totalTransform = null;
-        //        Transform inverseTransform = null;
-        //        if (linkWallInstances.Count != 0)
-        //        {
-        //            foreach (FamilyInstance inst in familyInstances)
-        //            {
-        //                foreach (RevitLinkInstance linkInst in linkWallInstances)
-        //                {
-        //                    //dictionary中尚未包含這個套管的ID則進行計算
-        //                    //if (!castWallDict.Keys.Contains(inst.Id))
-        //                    //{
-        //                    totalTransform = linkInst.GetTotalTransform();
-        //                    inverseTransform = totalTransform.Inverse;
-        //                    FilteredElementCollector collectorWall = getAllLinkedWall(linkInst.GetLinkDocument());
-        //                    Solid castSolid = method.singleSolidFromElement(inst);
-        //                    if (castSolid == null) continue;
-
-        //                    //座標轉換，因為抓法關係，要轉換成外參檔「原本」的座標
-        //                    castSolid = SolidUtils.CreateTransformed(castSolid, inverseTransform);
-        //                    BoundingBoxXYZ solidBounding = castSolid.GetBoundingBox();
-        //                    XYZ solidCenter = castSolid.ComputeCentroid();
-        //                    Transform newTrans = Transform.Identity;
-        //                    newTrans.Origin = solidCenter;
-        //                    Outline outLine = new Outline(newTrans.OfPoint(solidBounding.Min), newTrans.OfPoint(solidBounding.Max));
-
-        //                    BoundingBoxIntersectsFilter boundingBoxIntersectsFilter = new BoundingBoxIntersectsFilter(outLine);
-        //                    ElementIntersectsSolidFilter elementIntersectsSolidFilter = new ElementIntersectsSolidFilter(castSolid);
-        //                    collectorWall.WherePasses(boundingBoxIntersectsFilter).WherePasses(elementIntersectsSolidFilter);
-
-        //                    List<Element> tempList = collectorWall.ToList();
-        //                    //將蒐集到的東西放進dictionary中
-        //                    if (tempList.Count > 0 && !castWallDict.Keys.Contains(inst.Id))
-        //                    {
-        //                        castWallDict.Add(inst.Id, tempList);
-        //                        usefulLinkTrans.Add(totalTransform);
-        //                    }
-        //                    else if (tempList.Count > 0 && castWallDict.Keys.Contains(inst.Id))
-        //                    {
-        //                        foreach (Element e in tempList)
-        //                        {
-        //                            castWallDict[inst.Id].Add(e);
-        //                        }
-        //                    }
-        //                    ////在將東西放進Dictionary前，先確定長度與位置，調整一下
-        //                    //modifyCastLen(inst, tempList.First(), totalTransform);
-        //                }
-        //            }
-        //        }
-        //    }
-        //    catch
-        //    {
-        //        MessageBox.Show("無法判斷套管與牆的關係!");
-        //    }
-        //    return castWallDict;
-        //}
+        #region 已整合至method中
         //public static XYZ TransformPoint(XYZ point, Transform transform)
         //{
         //    double x = point.X;
@@ -278,7 +184,6 @@ namespace CEC_WallCast
         //    }
         //    return solids;
         //}
-
         //public Solid singleSolidFromWall(Element element)
         //{
         //    Options options = new Options();
@@ -321,14 +226,26 @@ namespace CEC_WallCast
         //    }
         //    return solidResult;
         //}
-        //public List<FamilyInstance> findTargetElements(Document doc)
+        //public bool checkPara(Element elem, string paraName)
+        //{
+        //    bool result = false;
+        //    foreach (Parameter parameter in elem.Parameters)
+        //    {
+        //        Parameter val = parameter;
+        //        if (val.Definition.Name == paraName)
+        //        {
+        //            result = true;
+        //        }
+        //    }
+        //    return result;
+        //}
+        //public List<FamilyInstance> findTargetElementsPart(Document doc)
         //{
         //    string internalName = "CEC-穿牆";
         //    List<FamilyInstance> castInstances = new List<FamilyInstance>();
         //    try
         //    {
-        //        //FilteredElementCollector coll = new FilteredElementCollector(doc,doc.ActiveView.Id);
-        //        FilteredElementCollector coll = new FilteredElementCollector(doc);
+        //        FilteredElementCollector coll = new FilteredElementCollector(doc, doc.ActiveView.Id);
         //        ElementCategoryFilter castCate_Filter = new ElementCategoryFilter(BuiltInCategory.OST_PipeAccessory);
         //        ElementClassFilter castInst_Filter = new ElementClassFilter(typeof(Instance));
         //        LogicalAndFilter andFilter = new LogicalAndFilter(castCate_Filter, castInst_Filter);
@@ -357,12 +274,179 @@ namespace CEC_WallCast
         //    }
         //    return castInstances;
         //}
+        //public List<RevitLinkInstance> findWallLinkInstance(Document doc)
+        //{
+        //    //找到擁有牆元件的外參
+        //    List<RevitLinkInstance> linkInstanceList = new List<RevitLinkInstance>();
+        //    FilteredElementCollector linkCollector = new FilteredElementCollector(doc).OfClass(typeof(RevitLinkInstance));
+        //    foreach (RevitLinkInstance linkInst in linkCollector)
+        //    {
+        //        Document linkDoc = linkInst.GetLinkDocument();
+        //        if (linkDoc != null)
+        //        {
+        //            FilteredElementCollector coll = new FilteredElementCollector(linkDoc).OfCategory(BuiltInCategory.OST_Walls).WhereElementIsNotElementType();
+        //            if (coll.Count() > 0) linkInstanceList.Add(linkInst);
+        //        }
+        //    }
+        //    return linkInstanceList;
+        //}
+        //public FilteredElementCollector getAllLinkedWall(Document linkedDoc)
+        //{
+        //    FilteredElementCollector beamCollector = new FilteredElementCollector(linkedDoc).OfClass(typeof(Wall));
+        //    beamCollector.WhereElementIsNotElementType();
+        //    return beamCollector;
+        //}
+        //public Dictionary<ElementId, List<Element>> getCastWallDict(Document doc)
+        //{
+        //    //蒐集套管與牆的關係
+        //    Dictionary<ElementId, List<Element>> castWallDict = new Dictionary<ElementId, List<Element>>();
+        //    try
+        //    {
+        //        //蒐集檔案中實做的牆套管
+        //        List<FamilyInstance> familyInstances = findTargetElementsPart(doc);
+        //        List<RevitLinkInstance> linkWallInstances = findWallLinkInstance(doc);
+        //        Transform totalTransform = null;
+        //        Transform inverseTransform = null;
+        //        if (linkWallInstances.Count != 0)
+        //        {
+        //            foreach (FamilyInstance inst in familyInstances)
+        //            {
+        //                foreach (RevitLinkInstance linkInst in linkWallInstances)
+        //                {
+        //                    //dictionary中尚未包含這個套管的ID則進行計算
+        //                    totalTransform = linkInst.GetTotalTransform();
+        //                    inverseTransform = totalTransform.Inverse;
+        //                    FilteredElementCollector collectorWall = getAllLinkedWall(linkInst.GetLinkDocument());
+        //                    Solid castSolid = singleSolidFromElement(inst);
+        //                    if (castSolid == null) continue;
+
+        //                    //座標轉換，因為抓法關係，要轉換成外參檔「原本」的座標
+        //                    castSolid = SolidUtils.CreateTransformed(castSolid, inverseTransform);
+        //                    BoundingBoxXYZ solidBounding = castSolid.GetBoundingBox();
+        //                    XYZ solidCenter = castSolid.ComputeCentroid();
+        //                    Transform newTrans = Transform.Identity;
+        //                    newTrans.Origin = solidCenter;
+        //                    Outline outLine = new Outline(newTrans.OfPoint(solidBounding.Min), newTrans.OfPoint(solidBounding.Max));
+
+        //                    BoundingBoxIntersectsFilter boundingBoxIntersectsFilter = new BoundingBoxIntersectsFilter(outLine);
+        //                    ElementIntersectsSolidFilter elementIntersectsSolidFilter = new ElementIntersectsSolidFilter(castSolid);
+        //                    collectorWall.WherePasses(boundingBoxIntersectsFilter).WherePasses(elementIntersectsSolidFilter);
+
+        //                    List<Element> tempList = collectorWall.ToList();
+        //                    //將蒐集到的東西放進dictionary中
+        //                    if (tempList.Count > 0 && !castWallDict.Keys.Contains(inst.Id))
+        //                    {
+        //                        castWallDict.Add(inst.Id, tempList);
+        //                        usefulLinkTrans.Add(totalTransform);
+        //                    }
+        //                    else if (tempList.Count > 0 && castWallDict.Keys.Contains(inst.Id))
+        //                    {
+        //                        foreach (Element e in tempList)
+        //                        {
+        //                            castWallDict[inst.Id].Add(e);
+        //                        }
+        //                    }
+        //                    ////在將東西放進Dictionary前，先確定長度與位置，調整一下
+        //                    //modifyCastLen(inst, tempList.First(), totalTransform);
+        //                }
+        //            }
+        //        }
+        //    }
+        //    catch
+        //    {
+        //        MessageBox.Show("無法判斷套管與牆的關係!");
+        //    }
+        //    return castWallDict;
+        //}
         //public double sortLevelbyHeight(Element element)
         //{
         //    Level tempLevel = element as Level;
         //    double levelHeight = element.LookupParameter("立面").AsDouble();
         //    return levelHeight;
         //}
+        //        public Element updateCastWithOutWall(Element elem)
+        //        {
+        //            FamilyInstance updateCast = null;
+        //            try
+        //            {
+        //                FamilyInstance inst = elem as FamilyInstance;
+        //                Document document = elem.Document;
+        //                Level level = document.GetElement(elem.LevelId) as Level;
+        //                //調整高度與長度
+        //                string internalCastName = inst.Symbol.LookupParameter("API識別名稱").AsString();
+        //                bool isCircleCast = internalCastName.Contains("圓");
+        //                double outterDiameter = 0;
+        //                double castDiameter = 0;
+        //                if (!isCircleCast)
+        //                {
+        //                    outterDiameter = inst.LookupParameter("開口高").AsDouble();
+        //                    castDiameter = outterDiameter / 2;
+        //                }
+        //                else if (isCircleCast)
+        //                {
+        //                    outterDiameter = inst.Symbol.LookupParameter("管外直徑").AsDouble();
+        //                    castDiameter = outterDiameter / 2;
+        //                }
+        //#if RELEASE2019
+        //                Parameter pa = inst.get_Parameter(BuiltInParameter.FLOOR_HEIGHTABOVELEVEL_PARAM);
+        //#else
+        //                Parameter pa = inst.get_Parameter(BuiltInParameter.FLOOR_HEIGHTABOVELEVEL_PARAM);
+        //#endif
+        //                double castHeight = pa.AsDouble() + castDiameter; //COP
+
+        //                //設定BBOP、BCOP、BTOP (牆只需要設定從底部開始的參數)
+        //                Parameter BBOP = inst.LookupParameter("BBOP");
+        //                Parameter BCOP = inst.LookupParameter("BCOP");
+        //                Parameter BTOP = inst.LookupParameter("BTOP");
+        //                Parameter TTOP = inst.LookupParameter("TTOP");
+        //                Parameter TCOP = inst.LookupParameter("TCOP");
+        //                Parameter TBOP = inst.LookupParameter("TBOP");
+        //                //設定值計算，後來修正成只要用FL計算即可
+        //                //抓到模型中所有的樓層元素，依照樓高排序。要找到位於他上方的樓層
+        //                FilteredElementCollector levelCollector = new FilteredElementCollector(document);
+        //                ElementFilter level_Filter = new ElementCategoryFilter(BuiltInCategory.OST_Levels);
+        //                levelCollector.WherePasses(level_Filter).WhereElementIsNotElementType().ToElements();
+        //                List<string> levelNames = new List<string>(); //用名字來確認篩選排序
+        //                List<Element> level_List = levelCollector.OrderBy(x => method.sortLevelbyHeight(x)).ToList();
+        //                for (int i = 0; i < level_List.Count(); i++)
+        //                {
+        //                    Level le = level_List[i] as Level;
+        //                    levelNames.Add(le.Name);
+        //                }
+        //                int index_lowLevel = levelNames.IndexOf(level.Name);
+        //                int index_topLevel = index_lowLevel + 1;
+        //                Level topLevel = null;
+        //                if (index_topLevel < level_List.Count())
+        //                {
+        //                    topLevel = level_List[index_topLevel] as Level;
+        //                }
+        //                else if (topLevel == null)
+        //                {
+        //                    MessageBox.Show("管的上方沒有樓層，無法計算穿牆套管偏移植");
+        //                }
+        //                //後來改成以基準樓層計算偏移值
+        //                double basicWallHeight = topLevel.Elevation - level.Elevation;
+        //                double BBOP_toSet = castHeight - outterDiameter / 2;
+        //                double BCOP_toSet = castHeight;
+        //                double BTOP_toSet = castHeight + outterDiameter / 2;
+        //                double TCOP_toSet = basicWallHeight - BCOP_toSet;
+        //                double TBOP_toSet = TCOP_toSet + outterDiameter / 2;
+        //                double TTOP_toSet = TCOP_toSet - outterDiameter / 2;
+        //                BBOP.Set(BBOP_toSet);
+        //                BCOP.Set(BCOP_toSet);
+        //                BTOP.Set(BTOP_toSet);
+        //                TBOP.Set(TBOP_toSet);
+        //                TCOP.Set(TCOP_toSet);
+        //                TTOP.Set(TTOP_toSet);
+        //                inst.LookupParameter("【原則】是否穿牆").Set("OK");
+        //                updateCast = inst;
+        //            }
+        //            catch
+        //            {
+        //                errorOutput += $"更新套管資訊失敗，ID為 {elem.Id} 的套管無法更新資訊!\n";
+        //            }
+        //            return updateCast;
+        //        }
         //        public Element updateCastWithWall(Element elem, Element linkedWall)
         //        {
         //            FamilyInstance updateCast = null;
@@ -409,7 +493,7 @@ namespace CEC_WallCast
         //                ElementFilter level_Filter = new ElementCategoryFilter(BuiltInCategory.OST_Levels);
         //                levelCollector.WherePasses(level_Filter).WhereElementIsNotElementType().ToElements();
         //                List<string> levelNames = new List<string>(); //用名字來確認篩選排序
-        //                List<Element> level_List = levelCollector.OrderBy(x => sortLevelbyHeight(x)).ToList();
+        //                List<Element> level_List = levelCollector.OrderBy(x => method.sortLevelbyHeight(x)).ToList();
         //                for (int i = 0; i < level_List.Count(); i++)
         //                {
         //                    Level le = level_List[i] as Level;
@@ -458,21 +542,6 @@ namespace CEC_WallCast
         //            }
         //            return updateCast;
         //        }
-        //public double calculateSolidVol(Element inst, Element linkedWall, Transform toTrans)
-        //{
-        //    //計算套管與牆之間的交集量體，並回傳其體積大小
-        //    double vol = 0.0;
-        //    Solid instSolid = singleSolidFromElement(inst);
-        //    Solid linkedWallSolid = method.singleSolidFromWall(linkedWall);
-        //    linkedWallSolid = SolidUtils.CreateTransformed(linkedWallSolid, toTrans);
-        //    Solid interSolid = BooleanOperationsUtils.ExecuteBooleanOperation(instSolid, linkedWallSolid, BooleanOperationsType.Intersect);
-        //    if (Math.Abs(interSolid.Volume) > 0.000001)
-        //    {
-        //        vol = interSolid.Volume;
-        //    }
-        //    return vol;
-        //}
-
         //public List<RevitLinkInstance> getMEPLinkInstance(Document doc)
         //{
         //    List<RevitLinkInstance> linkInstanceList = new List<RevitLinkInstance>();
@@ -530,19 +599,18 @@ namespace CEC_WallCast
         //        BoundingBoxXYZ castBounding = inst.get_BoundingBox(null);
         //        Outline castOutline = new Outline(castBounding.Min, castBounding.Max);
         //        BoundingBoxIntersectsFilter boxIntersectsFilter = new BoundingBoxIntersectsFilter(castOutline);
-        //        Solid castSolid = method.singleSolidFromElement(inst);
+        //        Solid castSolid = singleSolidFromElement(inst);
         //        ElementIntersectsSolidFilter solidFilter = new ElementIntersectsSolidFilter(castSolid);
         //        pipeCollector.WherePasses(boxIntersectsFilter).WherePasses(solidFilter);
         //        Parameter systemType = inst.LookupParameter("系統別");
 
-        //        List<RevitLinkInstance> otherMEP = getMEPLinkInstance(doc);
+        //        List<RevitLinkInstance> otherMEP = method.getMEPLinkInstance(doc);
         //        List<Element> pipeCollector_final = new List<Element>();
         //        //將本機端蒐集到的管放進list
         //        foreach (Element e in pipeCollector)
         //        {
         //            pipeCollector_final.Add(e);
         //        }
-
         //        //針對每一個實做的外參，蒐集管段後加入list
         //        foreach (RevitLinkInstance linkInst in otherMEP)
         //        {
@@ -690,7 +758,7 @@ namespace CEC_WallCast
         //        beamCurve = beamCurve.CreateTransformed(toTrans);
         //        XYZ startPoint = beamCurve.GetEndPoint(0);
         //        XYZ endPoint = beamCurve.GetEndPoint(1);
-        //        startPoint = TransformPoint(startPoint, toTrans);
+        //        startPoint =  TransformPoint(startPoint, toTrans);
         //        endPoint = TransformPoint(endPoint, toTrans);
         //        endPoint = new XYZ(endPoint.X, endPoint.Y, startPoint.Z);
         //        Line tempCrv = Line.CreateBound(startPoint, endPoint);
@@ -730,7 +798,20 @@ namespace CEC_WallCast
         //    }
         //    return updateCast;
         //}
+        //public double calculateSolidVol(Element inst, Element linkedWall, Transform toTrans)
+        //{
+        //    //計算套管與牆之間的交集量體，並回傳其體積大小
+        //    double vol = 0.0;
+        //    Solid instSolid =  singleSolidFromElement(inst);
+        //    Solid linkedWallSolid = singleSolidFromWall(linkedWall);
+        //    linkedWallSolid = SolidUtils.CreateTransformed(linkedWallSolid, toTrans);
+        //    Solid interSolid = BooleanOperationsUtils.ExecuteBooleanOperation(instSolid, linkedWallSolid, BooleanOperationsType.Intersect);
+        //    if (Math.Abs(interSolid.Volume) > 0.000001)
+        //    {
+        //        vol = interSolid.Volume;
+        //    }
+        //    return vol;
+        //}
         #endregion
     }
 }
-

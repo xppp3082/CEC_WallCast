@@ -50,12 +50,20 @@ namespace CEC_WallCast
                     Wall wall = linkedWall as Wall;
                     double holeLength = UnitUtils.ConvertFromInternalUnits(wall.Width, unitType) + 20;
                     LocationCurve wallLocate = linkedWall.Location as LocationCurve;
-                    Line wallLine = wallLocate.Curve as Line;
-                    XYZ wallDir = wallLine.Direction;
-                    XYZ wallNorDir = wallDir.CrossProduct(XYZ.BasisZ).Normalize().Negate();
+                    //對於曲牆不適用這樣的算法，該如何取得那段的取率?
+                    Curve wallCrv = wallLocate.Curve;
+                    wallCrv = wallCrv.CreateTransformed(linkTransform);
+                    Line wallLine =wallCrv as Line;
+                    double angle = 0.0;
+                    bool isLiner = false;
                     XYZ holeDir = XYZ.BasisY;
-                    double angle = holeDir.AngleTo(wallNorDir);
-
+                    if (wallLine != null)
+                    {
+                        isLiner = true;
+                        XYZ wallDir = wallLine.Direction;
+                        XYZ wallNorDir = wallDir.CrossProduct(XYZ.BasisZ).Normalize().Negate();
+                        angle = holeDir.AngleTo(wallNorDir);
+                    }
 
                     MEPCurve pipeCrv = pickPipe as MEPCurve;
                     LocationCurve pipeLocate = pipeCrv.Location as LocationCurve;
@@ -66,6 +74,14 @@ namespace CEC_WallCast
                     if (HoleLocation == null)
                     {
                         MessageBox.Show("管沒有和任何的牆交集，請重新調整!");
+                    }
+                    //如果牆不為曲線，須單獨設定，計算曲線導數作為旋轉依據
+                    if (isLiner != true)
+                    {
+                        IntersectionResult intersect = wallCrv.Project(HoleLocation);
+                        Transform ptTrans = wallCrv.ComputeDerivatives(intersect.Parameter,false);
+                        XYZ v = ptTrans.BasisY;
+                        angle = holeDir.AngleTo(v);
                     }
 
                     Family Wall_Cast;
@@ -362,7 +378,6 @@ ForgeTypeId unitType = UnitTypeId.Millimeters;
                         }
                     }
                     //多出關於電管的判斷
-                    //else if (targetPara.AsValueString() == "80 mm" || targetPara.AsValueString() == "82 mm" || targetPara.AsValueString() == "92 mm" || targetPara.AsValueString() == "75 mm")
                     else if (covertUnit >= 75 && covertUnit <= 95)
                     {
                         if (tempSymbol.Name == "125mm")
@@ -370,7 +385,6 @@ ForgeTypeId unitType = UnitTypeId.Millimeters;
                             targetFamilySymbol = tempSymbol;
                         }
                     }
-                    //else if (targetPara.AsValueString() == "100 mm" || targetPara.AsValueString() == "88 mm" || targetPara.AsValueString() == "104 mm")
                     else if (covertUnit >= 100 && covertUnit <= 125)
                     {
                         if (tempSymbol.Name == "150mm")
@@ -378,7 +392,6 @@ ForgeTypeId unitType = UnitTypeId.Millimeters;
                             targetFamilySymbol = tempSymbol;
                         }
                     }
-                    //else if (targetPara.AsValueString() == "125 mm")
                     else if (covertUnit > 125 && covertUnit <= 150)
                     {
                         if (tempSymbol.Name == "200mm")
@@ -409,6 +422,8 @@ ForgeTypeId unitType = UnitTypeId.Millimeters;
                     }
                 }
             }
+
+            if (targetFamilySymbol == null) MessageBox.Show("請確認穿牆套管元件中是否有對應管徑之族群類型");
             targetFamilySymbol.Activate();
             return targetFamilySymbol;
         }

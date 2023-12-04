@@ -73,22 +73,18 @@
     <Reference Include="RevitAPI, Version=21.0.0.0, Culture=neutral, processorArchitecture=AMD64" Condition="'$(Configuration)'=='2021'">
       <SpecificVersion>False</SpecificVersion>
       <HintPath>$(ProgramW6432)\Autodesk\Revit 2021\RevitAPI.dll</HintPath>
-      <Private>False</Private>
     </Reference>
     <Reference Include="RevitAPIUI, Version=21.0.0.0, Culture=neutral, processorArchitecture=AMD64" Condition="'$(Configuration)'=='2021'">
       <SpecificVersion>False</SpecificVersion>
       <HintPath>$(ProgramW6432)\Autodesk\Revit 2021\RevitAPIUI.dll</HintPath>
-      <Private>False</Private>
     </Reference>
     <Reference Include="RevitAPI, Version=23.0.0.0, Culture=neutral, processorArchitecture=AMD64" Condition="'$(Configuration)'=='2023'">
       <SpecificVersion>False</SpecificVersion>
       <HintPath>C:\Program Files\Autodesk\Revit 2023\RevitAPI.dll</HintPath>
-      <Private>False</Private>
     </Reference>
     <Reference Include="RevitAPIUI, Version=23.0.0.0, Culture=neutral, processorArchitecture=AMD64" Condition="'$(Configuration)'=='2023'">
       <SpecificVersion>False</SpecificVersion>
       <HintPath>C:\Program Files\Autodesk\Revit 2023\RevitAPIUI.dll</HintPath>
-      <Private>False</Private>
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.Data" />
@@ -100,15 +96,12 @@
   <ItemGroup>
     <Compile Include="App.cs" />
     <Compile Include="CopyAllWallCast.cs" />
-    <Compile Include="CopyPartWallCast.cs" />
-    <Compile Include="CreateBoxRectLink.cs" />
     <Compile Include="CreateRectWallCast.cs" />
     <Compile Include="CreateRectWallCastLink.cs" />
     <Compile Include="CreateWallCast.cs" />
     <Compile Include="CreateWallCastLink.cs" />
     <Compile Include="CreateWallCastV2.cs" />
     <Compile Include="ExcelLog.cs" />
-    <Compile Include="method.cs" />
     <Compile Include="MultiWallRectCast.cs" />
     <Compile Include="MultiWallRectCastLink.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
