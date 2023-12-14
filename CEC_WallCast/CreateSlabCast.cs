@@ -15,7 +15,7 @@ using System.Windows.Forms;
 namespace CEC_WallCast
 {
     [Autodesk.Revit.Attributes.Transaction(Autodesk.Revit.Attributes.TransactionMode.Manual)]
-    class CreateWallCastV2 : IExternalCommand
+    class CreateSlabCast : IExternalCommand
     {
 #if RELEASE2019
         public static DisplayUnitType unitType = DisplayUnitType.DUT_MILLIMETERS;
@@ -37,73 +37,83 @@ namespace CEC_WallCast
 
                     //拿到管元件
                     ISelectionFilter pipeFilter = new PipeSelectionFilter(doc);
-                    Reference pickPipeRef = uidoc.Selection.PickObject(ObjectType.Element, pipeFilter, "請選擇貫穿牆的管");
+                    Reference pickPipeRef = uidoc.Selection.PickObject(ObjectType.Element, pipeFilter, "請選擇貫穿版的管");
                     Element pickPipe = doc.GetElement(pickPipeRef.ElementId);
                     //拿到整份牆外參檔&Transform
                     ISelectionFilter linkedWallFilter = new WallSelectionFilter(doc);
-                    Reference pickWallRef = uidoc.Selection.PickObject(ObjectType.LinkedElement, linkedWallFilter, "請選擇貫穿的牆");
-                    RevitLinkInstance pickWall = doc.GetElement(pickWallRef) as RevitLinkInstance;
-                    Transform linkTransform = pickWall.GetTotalTransform();
+                    Reference pickSlabRef = uidoc.Selection.PickObject(ObjectType.LinkedElement, linkedWallFilter, "請選擇貫穿的版");
+                    RevitLinkInstance pickSlab = doc.GetElement(pickSlabRef) as RevitLinkInstance;
+                    Transform linkTransform = pickSlab.GetTotalTransform();
 
-                    //拿到實際要用的那道牆元件
-                    Element linkedWall = pickWall.GetLinkDocument().GetElement(pickWallRef.LinkedElementId);
-                    Wall wall = linkedWall as Wall;
-                    double holeLength = UnitUtils.ConvertFromInternalUnits(wall.Width, unitType) + 20;
-                    LocationCurve wallLocate = linkedWall.Location as LocationCurve;
-                    //對於曲牆不適用這樣的算法，該如何取得那段的取率?
-                    Curve wallCrv = wallLocate.Curve;
-                    wallCrv = wallCrv.CreateTransformed(linkTransform);
-                    Line wallLine =wallCrv as Line;
-                    double angle = 0.0;
-                    bool isLiner = false;
-                    XYZ holeDir = XYZ.BasisY;
-                    if (wallLine != null)
+
+                    //拿到實際要用的那道版元件
+                    Document linkDoc = pickSlab.GetLinkDocument();
+                    Element linkedSlab = linkDoc.GetElement(pickSlabRef.LinkedElementId);
+                    Level linkLevel = linkDoc.GetElement(linkedSlab.LevelId) as Level;
+                    double linkLevelElevation = linkLevel.ProjectElevation;
+                    Level targetLevel = null;
+                    FilteredElementCollector levelColl = new FilteredElementCollector(doc).OfClass(typeof(Level)).WhereElementIsNotElementType();
+                    foreach (Element e in levelColl)
                     {
-                        isLiner = true;
-                        XYZ wallDir = wallLine.Direction;
-                        XYZ wallNorDir = wallDir.CrossProduct(XYZ.BasisZ).Normalize().Negate();
-                        angle = holeDir.AngleTo(wallNorDir);
+                        Level tempLevel = e as Level;
+                        if(tempLevel.ProjectElevation == linkLevelElevation)
+                        {
+                            targetLevel = tempLevel;
+                            break;
+                        }
                     }
+
+                    Floor slab = linkedSlab as Floor;
+                    double slabWidth = linkedSlab.get_Parameter(BuiltInParameter.FLOOR_ATTR_THICKNESS_PARAM).AsDouble();
+                    double holeLength = UnitUtils.ConvertFromInternalUnits(slabWidth, unitType) + 20;
+                    #region 樓板沒有locationCurve的屬性
+                    //LocationCurve slabLocate = linkedSlab.Location as LocationCurve;
+                    //Curve slabCrv = slabLocate.Curve;
+                    //slabCrv = slabCrv.CreateTransformed(linkTransform);
+                    //Line wallLine = slabCrv as Line;
+                    //double angle = 0.0;
+                    //bool isLiner = false;
+                    //XYZ holeDir = XYZ.BasisY;
+                    //if (wallLine != null)
+                    //{
+                    //    isLiner = true;
+                    //    XYZ wallDir = wallLine.Direction;
+                    //    XYZ wallNorDir = wallDir.CrossProduct(XYZ.BasisZ).Normalize().Negate();
+                    //    angle = holeDir.AngleTo(wallNorDir);
+                    //}
+                    #endregion
 
                     MEPCurve pipeCrv = pickPipe as MEPCurve;
                     LocationCurve pipeLocate = pipeCrv.Location as LocationCurve;
                     Curve pipeCurve = pipeLocate.Curve;
-                    Level level = pipeCrv.ReferenceLevel; //取得管線的參考樓層
-                    double elevation = level.Elevation;
-                    XYZ HoleLocation = GetHoleLocation(linkedWall, pickPipe, linkTransform);
+                    //Level level = pipeCrv.ReferenceLevel; //取得管線的參考樓層
+                    //double elevation = level.Elevation;
+                    XYZ HoleLocation = GetHoleLocation(linkedSlab, pickPipe, linkTransform);
                     if (HoleLocation == null)
                     {
-                        MessageBox.Show("管沒有和任何的牆交集，請重新調整!");
+                        MessageBox.Show("管沒有和任何的版交集，請重新調整!");
                     }
-                    //如果牆不為曲線，須單獨設定，計算曲線導數作為旋轉依據
-                    if (isLiner != true)
-                    {
-                        IntersectionResult intersect = wallCrv.Project(HoleLocation);
-                        Transform ptTrans = wallCrv.ComputeDerivatives(intersect.Parameter,false);
-                        XYZ v = ptTrans.BasisY;
-                        angle = holeDir.AngleTo(v);
-                    }
-
                     Family Wall_Cast;
                     FamilyInstance instance = null;
                     using (Transaction tx = new Transaction(doc))
                     {
                         tx.Start("載入檔案測試");
-                        Wall_Cast = new WallCast().WallCastSymbol(doc);
+                        Wall_Cast = new SlabCast().SlabCastSymbol(doc);
                         tx.Commit();
                     }
 
                     using (Transaction trans = new Transaction(doc))
                     {
-                        trans.Start("放置穿牆套管");
+                        trans.Start("放置穿版套管");
                         if (HoleLocation != null)
                         {
-                            FamilySymbol CastSymbol2 = new WallCast().findWall_CastSymbol(doc, Wall_Cast, pickPipe);
-                            instance = doc.Create.NewFamilyInstance(HoleLocation, CastSymbol2, level, StructuralType.NonStructural);
+                            FamilySymbol CastSymbol2 = new SlabCast().findSlab_CastSymbol(doc, Wall_Cast, pickPipe);
+                            instance = doc.Create.NewFamilyInstance(HoleLocation, CastSymbol2, targetLevel, StructuralType.NonStructural);
+                            //instance = doc.Create.NewFamilyInstance(HoleLocation, CastSymbol2, level, StructuralType.NonStructural);
                             //參數檢查
                             List<string> paraNameToCheck = new List<string>()
                                 {
-                                   "開口長","系統別","TTOP","TCOP","TBOP","BBOP","BCOP","BTOP"
+                                   "開口長","系統別"
                                 };
 
                             foreach (string item in paraNameToCheck)
@@ -115,101 +125,14 @@ namespace CEC_WallCast
                                 }
                             }
 
-                            //2022.05.13_新增：針對具有斜率的管材，計算對應的偏移值
-                            double slopeOffset = 0.0;
-                            Parameter pipeSlope = pickPipe.LookupParameter("斜度");
-                            if (pipeSlope != null && pipeSlope.AsDouble() != 0)
-                            {
-                                double pipeStartHeight = pickPipe.get_Parameter(BuiltInParameter.RBS_START_OFFSET_PARAM).AsDouble();
-                                double pipeEndHeight = pickPipe.get_Parameter(BuiltInParameter.RBS_END_OFFSET_PARAM).AsDouble();
-                                XYZ startPt = pipeCurve.GetEndPoint(0);
-                                XYZ endPt = pipeCurve.GetEndPoint(1);
-                                double distToStart = HoleLocation.DistanceTo(startPt);
-                                if (pipeStartHeight >= pipeEndHeight)
-                                {
-                                    slopeOffset = -(distToStart * pipeSlope.AsDouble());
-                                }
-                                else if (pipeStartHeight < pipeEndHeight)
-                                {
-                                    slopeOffset = distToStart * pipeSlope.AsDouble();
-                                }
-                            }
-
-
-                            //調整高度與長度
-                            Parameter pa = pickPipe.get_Parameter(BuiltInParameter.RBS_OFFSET_PARAM);
-                            double castDiameter = instance.Symbol.LookupParameter("管外直徑").AsDouble() / 2;
-                            double pipeHeight = pa.AsDouble();
 #if RELEASE2019
                             Parameter instHeight = instance.get_Parameter(BuiltInParameter.INSTANCE_FREE_HOST_OFFSET_PARAM);
 #else
                             Parameter instHeight = instance.get_Parameter(BuiltInParameter.INSTANCE_FREE_HOST_OFFSET_PARAM);
 #endif
-                            //instance.LookupParameter("偏移").Set(pipeHeight - castDiameter+slopeOffset);
-                            instHeight.Set(pipeHeight - castDiameter + slopeOffset);
+                            instHeight.Set(HoleLocation.Z -  targetLevel.ProjectElevation+slabWidth/2);
                             double castLength = UnitUtils.ConvertToInternalUnits(holeLength, unitType);
                             instance.LookupParameter("開口長").Set(castLength);
-                            LocationPoint loPoint = instance.Location as LocationPoint;
-                            XYZ newPoint = new XYZ(HoleLocation.X, HoleLocation.Y, HoleLocation.Z + 10);
-                            Line axis = Line.CreateBound(HoleLocation, newPoint);
-                            loPoint.Rotate(axis, angle);
-
-
-                            //設定BBOP、BCOP、BTOP (牆只需要設定從底部開始的參數)
-                            Parameter BBOP = instance.LookupParameter("BBOP");
-                            Parameter BCOP = instance.LookupParameter("BCOP");
-                            Parameter BTOP = instance.LookupParameter("BTOP");
-                            Parameter TTOP = instance.LookupParameter("TTOP");
-                            Parameter TCOP = instance.LookupParameter("TCOP");
-                            Parameter TBOP = instance.LookupParameter("TBOP");
-                            double outterDiameter = instance.Symbol.LookupParameter("管外直徑").AsDouble();
-                            double wallBaseOffset = wall.get_Parameter(BuiltInParameter.WALL_BASE_OFFSET).AsDouble();
-                            double wallHeight = wall.get_Parameter(BuiltInParameter.WALL_USER_HEIGHT_PARAM).AsDouble();
-                            //設定值計算，後來修正成只要用FL計算即可
-                            //抓到模型中所有的樓層元素，依照樓高排序。要找到位於他上方的樓層
-                            FilteredElementCollector levelCollector = new FilteredElementCollector(doc);
-                            ElementFilter level_Filter = new ElementCategoryFilter(BuiltInCategory.OST_Levels);
-                            levelCollector.WherePasses(level_Filter).WhereElementIsNotElementType().ToElements();
-                            List<string> levelNames = new List<string>(); //用名字來確認篩選排序
-                            List<Element> level_List = levelCollector.OrderBy(x => sortLevelbyHeight(x)).ToList();
-                            for (int i = 0; i < level_List.Count(); i++)
-                            {
-                                Level le = level_List[i] as Level;
-                                levelNames.Add(le.Name);
-                            }
-                            int index_lowLevel = levelNames.IndexOf(level.Name);
-                            int index_topLevel = index_lowLevel + 1;
-                            Level topLevel = null;
-                            if (index_topLevel < level_List.Count())
-                            {
-                                topLevel = level_List[index_topLevel] as Level;
-                            }
-                            else if (topLevel == null)
-                            {
-                                message = "管的上方沒有樓層，無法計算穿牆套管偏移值";
-                                return Result.Failed;
-                            }
-                            double basicWallHeight = topLevel.Elevation - level.Elevation;
-                            double BBOP_toSet = pipeHeight - outterDiameter / 2;
-                            double BCOP_toSet = pipeHeight;
-                            double BTOP_toSet = pipeHeight + outterDiameter / 2;
-                            double TCOP_toSet = basicWallHeight - BCOP_toSet;
-                            double TBOP_toSet = TCOP_toSet + outterDiameter / 2;
-                            double TTOP_toSet = TCOP_toSet - outterDiameter / 2;
-                            #region 早期算法，連同降板一起計算
-                            //double BBOP_toSet = pipeHeight - wallBaseOffset - outterDiameter / 2;
-                            //double BCOP_toSet = pipeHeight - wallBaseOffset;
-                            //double BTOP_toSet = pipeHeight - wallBaseOffset + outterDiameter / 2;
-                            //double TCOP_toSet = wallHeight - BCOP_toSet;
-                            //double TBOP_toSet = TCOP_toSet + outterDiameter / 2;
-                            //double TTOP_toSet = TCOP_toSet - outterDiameter / 2;
-                            #endregion
-                            BBOP.Set(BBOP_toSet);
-                            BCOP.Set(BCOP_toSet);
-                            BTOP.Set(BTOP_toSet);
-                            TBOP.Set(TBOP_toSet);
-                            TCOP.Set(TCOP_toSet);
-                            TTOP.Set(TTOP_toSet);
                         }
                         trans.Commit();
                     }
@@ -236,7 +159,6 @@ namespace CEC_WallCast
             }
             return result;
         }
-
         public double sortLevelbyHeight(Element element)
         {
             Level tempLevel = element as Level;
@@ -244,14 +166,72 @@ namespace CEC_WallCast
             //double levelHeight = element.LookupParameter("立面").AsDouble();
             return levelHeight;
         }
-        public Solid singleSolidFromElement(Element element)
+        public static IList<Solid> GetTargetSolids(Element element)
         {
+            List<Solid> solids = new List<Solid>();
             Options options = new Options();
+            //預設為不包含不可見元件，因此改成true
+            options.ComputeReferences = true;
+            options.DetailLevel = ViewDetailLevel.Fine;
+            options.IncludeNonVisibleObjects = true;
             GeometryElement geomElem = element.get_Geometry(options);
-            Solid solidResult = null;
             foreach (GeometryObject geomObj in geomElem)
             {
-                solidResult = geomObj as Solid;
+                if (geomObj is Solid)
+                {
+                    Solid solid = (Solid)geomObj;
+                    if (solid.Faces.Size > 0 && solid.Volume > 0.0)
+                    {
+                        solids.Add(solid);
+                    }
+                }
+                else if (geomObj is GeometryInstance)//一些特殊狀況可能會用到，like樓梯
+                {
+                    GeometryInstance geomInst = (GeometryInstance)geomObj;
+                    GeometryElement instGeomElem = geomInst.GetInstanceGeometry();
+                    foreach (GeometryObject instGeomObj in instGeomElem)
+                    {
+                        if (instGeomObj is Solid)
+                        {
+                            Solid solid = (Solid)instGeomObj;
+                            if (solid.Faces.Size > 0 && solid.Volume > 0.0)
+                            {
+                                solids.Add(solid);
+                            }
+                        }
+                    }
+                }
+            }
+            return solids;
+        }
+        public static Solid singleSolidFromElement(Element inputElement)
+        {
+            Document doc = inputElement.Document;
+            Autodesk.Revit.ApplicationServices.Application app = doc.Application;
+            // create solid from Element:
+            IList<Solid> fromElement = GetTargetSolids(inputElement);
+            int solidCount = fromElement.Count;
+            // MessageBox.Show(solidCount.ToString());
+            // Merge all found solids into single one
+            Solid solidResult = null;
+            //XYZ checkheight = new XYZ(0, 0, 6.88976);
+            //Transform tr = Transform.CreateTranslation(checkheight);
+            if (solidCount == 1)
+            {
+                solidResult = fromElement[0];
+            }
+            else if (solidCount > 1)
+            {
+                solidResult =
+                    BooleanOperationsUtils.ExecuteBooleanOperation(fromElement[0], fromElement[1], BooleanOperationsType.Union);
+            }
+
+            if (solidCount > 2)
+            {
+                for (int i = 2; i < solidCount; i++)
+                {
+                    solidResult = BooleanOperationsUtils.ExecuteBooleanOperation(solidResult, fromElement[i], BooleanOperationsType.Union);
+                }
             }
             return solidResult;
         }
@@ -282,19 +262,17 @@ namespace CEC_WallCast
             return point_Center;
 
         }
-
-
     }
-    public class WallCast
+    public class SlabCast
     {
         #region
         //將穿牆套管的功能做成class管理
         //1.先找到套管的Family
         //2.用Family反查Symbol
         #endregion
-        public Family WallCastSymbol(Document doc)
+        public Family SlabCastSymbol(Document doc)
         {
-            string internalNameWall = "CEC-穿牆套管";
+            string internalNameWall = "CEC-穿版套管-圓";
             Family Wall_CastType = null;
             ElementFilter Wall_CastCategoryFilter = new ElementCategoryFilter(BuiltInCategory.OST_PipeAccessory);
             ElementFilter Wall_CastSymbolFilter = new ElementClassFilter(typeof(FamilySymbol));
@@ -315,17 +293,17 @@ namespace CEC_WallCast
             }
             if (!symbolFound)
             {
-                MessageBox.Show("尚未載入指定的穿牆套管元件!");
+                MessageBox.Show("尚未載入指定的穿版套管元件!");
             }
             return Wall_CastType;
         }
 
-        public FamilySymbol findWall_CastSymbol(Document doc, Family CastFamily, Element element)
+        public FamilySymbol findSlab_CastSymbol(Document doc, Family CastFamily, Element element)
         {
 #if RELEASE2019
             DisplayUnitType unitType = DisplayUnitType.DUT_MILLIMETERS;
 #else
-ForgeTypeId unitType = UnitTypeId.Millimeters;
+            ForgeTypeId unitType = UnitTypeId.Millimeters;
 #endif
             FamilySymbol targetFamilySymbol = null; //用來找目標familySymbol
                                                     //如果確定找到family後，針對不同得管選取不同的穿樑套管大小，以大兩吋為規則，如果有坡度則大三吋
@@ -429,49 +407,11 @@ ForgeTypeId unitType = UnitTypeId.Millimeters;
         }
     }
     //過濾器區域
-    public class PipeSelectionFilter : ISelectionFilter
-    {
-        private Document _doc;
-        public PipeSelectionFilter(Document doc)
-        {
-            this._doc = doc;
-        }
-        public bool AllowElement(Element element)
-        {
-            Category pipe = Category.GetCategory(_doc, BuiltInCategory.OST_PipeCurves);
-            Category duct = Category.GetCategory(_doc, BuiltInCategory.OST_DuctCurves);
-            Category conduit = Category.GetCategory(_doc, BuiltInCategory.OST_Conduit);
-            Category tray = Category.GetCategory(_doc, BuiltInCategory.OST_CableTray);
-            if (element.Category.Id == pipe.Id)
-            {
-                return true;
-            }
-            else if (element.Category.Id == duct.Id)
-            {
-                return true;
-            }
-            else if (element.Category.Id == conduit.Id)
-            {
-                return true;
-            }
-            else if (element.Category.Id == tray.Id)
-            {
-                return true;
-            }
-            return false;
-        }
-
-        public bool AllowReference(Reference refer, XYZ point)
-        {
-            return false;
-        }
-    }
-    //限制選擇牆時能選到的品類
-    public class WallSelectionFilter : ISelectionFilter
+    public class SlabSelectionFilter : ISelectionFilter
     {
         private Document _doc;
 
-        public WallSelectionFilter(Document doc)
+        public SlabSelectionFilter(Document doc)
         {
             this._doc = doc;
         }
@@ -484,12 +424,11 @@ ForgeTypeId unitType = UnitTypeId.Millimeters;
         {
             var link = this._doc.GetElement(refer) as RevitLinkInstance;
             var elem = link.GetLinkDocument().GetElement(refer.LinkedElementId);
-            if (elem is Wall || elem is Floor)
+            if (elem is Floor)
             {
                 return true;
             }
             return false;
         }
     }
-
 }

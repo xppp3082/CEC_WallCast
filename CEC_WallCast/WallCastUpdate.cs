@@ -41,7 +41,7 @@ namespace CEC_WallCast
                 Document doc = uidoc.Document;
 
                 //找到所有穿牆套管元件
-                List<FamilyInstance> famList = m.findTargetElements(doc);
+                List<FamilyInstance> famList = m.findTargetElements(doc,"穿牆");
                 using (WallCastProgressUI progressView2 = new WallCastProgressUI(famList.Count))
                 {
                     List<string> usefulParaName = new List<string> { "開口長","BTOP", "BCOP", "BBOP", "TTOP", "TCOP", "TBOP",
@@ -62,7 +62,7 @@ namespace CEC_WallCast
                     using (Transaction trans = new Transaction(doc))
                     {
                         trans.Start("更新穿牆套管資訊");
-                        Dictionary<ElementId, List<Element>> wallCastDict = m.getCastWallDict(doc);
+                        Dictionary<ElementId, List<Element>> wallCastDict = m.getCastDict(doc,"穿牆");
                         int transCount = 0;
                         List<double> intersectVol = new List<double>();
                         #region 2023.05.15新增，需針對沒有碰到牆的套管也更新其內容
@@ -74,11 +74,8 @@ namespace CEC_WallCast
                             {
                                 m.updateCastWithOutWall(e);
                             }
-                            //}
                             #endregion
                             #region 原資訊更新方法
-                            //foreach (ElementId id in wallCastDict.Keys)
-                            //{                         
                             else if (wallCastDict.Keys.Contains(e.Id))
                             {
                                 //問題思考：要如何針對差集的量體去做元件的排序，同時可以精確對應每到牆對應的transform
@@ -87,9 +84,8 @@ namespace CEC_WallCast
                                 int orginIndex = wallCastDict[id].IndexOf(modifyWallLst.First());
 
                                 m.updateCastWithWall(doc.GetElement(id), modifyWallLst.First());
-                                //updateCastContent(doc, doc.GetElement(id));
                                 //用來記錄transform的方法有點詭異，日後可能會出bug//(2022.08.09更新_利用原本的排序反查原本的orginIndex)
-                                m.modifyCastLen(doc.GetElement(id), modifyWallLst.First(), m.usefulLinkTrans[orginIndex]);
+                                m.modifyCastLenWithWall(doc.GetElement(id), modifyWallLst.First(), m.usefulLinkTrans[orginIndex]);
                                 transCount++;
                                 //以外參進行單位的更新進度顯示
                             }

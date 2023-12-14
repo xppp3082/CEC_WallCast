@@ -43,7 +43,7 @@ namespace CEC_WallCast
                 Document doc = uidoc.Document;
 
                 //找到所有穿牆套管元件
-                List<FamilyInstance> famList = m.findTargetElementsPart(doc);
+                List<FamilyInstance> famList = m.findTargetElementsPart(doc, "穿牆");
                 updateCount = famList.Count();
                 using (WallCastProgressUI progressView2 = new WallCastProgressUI(famList.Count))
                 {
@@ -65,7 +65,7 @@ namespace CEC_WallCast
                     using (Transaction trans = new Transaction(doc))
                     {
                         trans.Start("更新穿牆套管資訊");
-                        Dictionary<ElementId, List<Element>> wallCastDict = m.getCastWallDict(doc);
+                        Dictionary<ElementId, List<Element>> wallCastDict = m.getCastDict(doc,"穿牆");
                         int transCount = 0;
                         List<double> intersectVol = new List<double>();
                         //foreach (Element e in famList)
@@ -92,7 +92,7 @@ namespace CEC_WallCast
                                 int orginIndex = wallCastDict[id].IndexOf(modifyWallLst.First());
                                 m.updateCastWithWall(doc.GetElement(id), modifyWallLst.First());
                                 //用來記錄transform的方法有點詭異，日後可能會出bug//(2022.08.09更新_利用原本的排序反查原本的orginIndex)
-                                m.modifyCastLen(doc.GetElement(id), modifyWallLst.First(), m.usefulLinkTrans[orginIndex]);
+                                m.modifyCastLenWithWall(doc.GetElement(id), modifyWallLst.First(), m.usefulLinkTrans[orginIndex]);
                                 transCount++;
                                 //以外參進行單位的更新進度顯示
                             }
@@ -104,8 +104,6 @@ namespace CEC_WallCast
                         {
                             if (!wallCastDict.Keys.Contains(inst.Id))
                             {
-                                //inst.LookupParameter("干涉管數量").Set(0);
-                                //inst.LookupParameter("系統別").Set("SP");
                                 inst.LookupParameter("【原則】是否穿牆").Set("不符合");
                             }
                         }

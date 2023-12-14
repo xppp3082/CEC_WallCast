@@ -33,6 +33,7 @@ namespace CEC_WallCast
                     UIDocument uidoc = uiapp.ActiveUIDocument;
                     Autodesk.Revit.ApplicationServices.Application app = uiapp.Application;
                     Document doc = uidoc.Document;
+                    method m = new method();
 
                     //拿到管元件
                     ISelectionFilter pipeFilter = new PipeSelectionFilter(doc);
@@ -97,8 +98,8 @@ namespace CEC_WallCast
                         if (HoleLocation != null)
                         {
                             FamilySymbol CastSymbol2 = new RectWallCast().findWall_CastSymbol(doc, Wall_Cast, pickPipe);
-                            Parameter pipeWidth = getPipeWidth(pickPipe);
-                            Parameter pipeHigh = getPipeHeight(pickPipe);
+                            Parameter pipeWidth = m.getPipeWidth(pickPipe);
+                            Parameter pipeHigh = m.getPipeHeight(pickPipe);
                             instance = doc.Create.NewFamilyInstance(HoleLocation, CastSymbol2, level, StructuralType.NonStructural);
                             //參數檢查
                             List<string> paraNameToCheck = new List<string>()
@@ -255,7 +256,6 @@ namespace CEC_WallCast
         }
         public XYZ GetHoleLocation(Element wallElem, Element pipeElem, Transform trans)
         {
-
             //取得牆的solid
             Solid solid_wall = singleSolidFromElement(wallElem);
             solid_wall = SolidUtils.CreateTransformed(solid_wall, trans);
@@ -275,72 +275,9 @@ namespace CEC_WallCast
                 XYZ tempCenter = curveInside.Evaluate(0.5, true);
                 //point_Center = new XYZ((point_Start.X + point_End.X) / 2, (point_Start.Y + point_End.Y) / 2, ((point_Start.Z + point_End.Z) / 2));
                 point_Center = tempCenter;
-
             }
             return point_Center;
-
         }
-        public Parameter getPipeWidth(Element element)
-        {
-            Parameter targetPara = null;
-            //Pipe >用外徑計算
-            if (element.get_Parameter(BuiltInParameter.RBS_PIPE_OUTER_DIAMETER) != null)
-            {
-                targetPara = element.get_Parameter(BuiltInParameter.RBS_PIPE_OUTER_DIAMETER);
-            }
-            //Conduit
-            else if (element.get_Parameter(BuiltInParameter.RBS_CONDUIT_DIAMETER_PARAM) != null)
-            {
-                targetPara = element.get_Parameter(BuiltInParameter.RBS_CONDUIT_DIAMETER_PARAM);
-            }
-            //Duct
-            else if (element.get_Parameter(BuiltInParameter.RBS_CURVE_DIAMETER_PARAM) != null)
-            {
-                targetPara = element.get_Parameter(BuiltInParameter.RBS_CURVE_DIAMETER_PARAM);
-            }
-            //方型Duct
-            else if (element.get_Parameter(BuiltInParameter.RBS_CURVE_WIDTH_PARAM) != null)
-            {
-                targetPara = element.get_Parameter(BuiltInParameter.RBS_CURVE_WIDTH_PARAM);
-            }
-            //電纜架
-            else if (element.get_Parameter(BuiltInParameter.RBS_CABLETRAY_WIDTH_PARAM) != null)
-            {
-                targetPara = element.get_Parameter(BuiltInParameter.RBS_CABLETRAY_WIDTH_PARAM);
-            }
-            return targetPara;
-        }
-        public Parameter getPipeHeight(Element element)
-        {
-            Parameter targetPara = null;
-            //Pipe
-            if (element.get_Parameter(BuiltInParameter.RBS_PIPE_OUTER_DIAMETER) != null)
-            {
-                targetPara = element.get_Parameter(BuiltInParameter.RBS_PIPE_OUTER_DIAMETER);
-            }
-            //Conduit
-            else if (element.get_Parameter(BuiltInParameter.RBS_CONDUIT_DIAMETER_PARAM) != null)
-            {
-                targetPara = element.get_Parameter(BuiltInParameter.RBS_CONDUIT_DIAMETER_PARAM);
-            }
-            //Duct
-            else if (element.get_Parameter(BuiltInParameter.RBS_CURVE_DIAMETER_PARAM) != null)
-            {
-                targetPara = element.get_Parameter(BuiltInParameter.RBS_CURVE_DIAMETER_PARAM);
-            }
-            //方型Duct
-            else if (element.get_Parameter(BuiltInParameter.RBS_CURVE_HEIGHT_PARAM) != null)
-            {
-                targetPara = element.get_Parameter(BuiltInParameter.RBS_CURVE_HEIGHT_PARAM);
-            }
-            //電纜架
-            else if (element.get_Parameter(BuiltInParameter.RBS_CABLETRAY_HEIGHT_PARAM) != null)
-            {
-                targetPara = element.get_Parameter(BuiltInParameter.RBS_CABLETRAY_HEIGHT_PARAM);
-            }
-            return targetPara;
-        }
-
     }
     public class RectWallCast
     {
