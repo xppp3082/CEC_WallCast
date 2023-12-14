@@ -1,4 +1,4 @@
-﻿#region Namespaces
+#region Namespaces
 using Autodesk.Revit.ApplicationServices;
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.DB;
@@ -159,7 +159,7 @@ namespace CEC_WallCast
                 using (Transaction trans = new Transaction(doc))
                 {
                     trans.Start("放置多穿版套管");
-                    ////以directShape測試布林結果
+                    //以directShape測試布林結果
                     //DirectShape ds = DirectShape.CreateElement(doc, new ElementId(BuiltInCategory.OST_GenericModel));
                     //ds.ApplicationId = "Application id";
                     //ds.ApplicationDataId = "Geometry object id";

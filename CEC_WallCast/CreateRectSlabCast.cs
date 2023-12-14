@@ -1,4 +1,4 @@
-﻿#region Namespaces
+#region Namespaces
 using Autodesk.Revit.ApplicationServices;
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.DB;
@@ -22,7 +22,6 @@ namespace CEC_WallCast
 #else
         public static ForgeTypeId unitType = UnitTypeId.Millimeters;
 #endif
-        public method m = new method();
         public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elements)
         {
             while (true)
@@ -35,6 +34,7 @@ namespace CEC_WallCast
                     UIDocument uidoc = uiapp.ActiveUIDocument;
                     Autodesk.Revit.ApplicationServices.Application app = uiapp.Application;
                     Document doc = uidoc.Document;
+                    method m = new method();
 
                     //拿到管元件
                     ISelectionFilter pipeFilter = new PipeSelectionFilter(doc);
