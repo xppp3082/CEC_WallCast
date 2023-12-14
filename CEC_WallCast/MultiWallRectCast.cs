@@ -32,6 +32,7 @@ namespace CEC_WallCast
                 UIDocument uidoc = uiapp.ActiveUIDocument;
                 Autodesk.Revit.ApplicationServices.Application app = uiapp.Application;
                 Document doc = uidoc.Document;
+                method m = new method();
 
                 //拿到管元件(多管)
                 ISelectionFilter pipeFilter = new PipeSelectionFilter(doc);
@@ -101,8 +102,8 @@ namespace CEC_WallCast
                 List<XYZ> intersectWidth = new List<XYZ>();
                 foreach (Element pickPipe in pickPipes)
                 {
-                    double half_pipeHeight = getPipeHeight(pickPipe).AsDouble() / 2;
-                    double half_pipeWidth = getPipeWidth(pickPipe).AsDouble() / 2;
+                    double half_pipeHeight = m.getPipeHeight(pickPipe).AsDouble() / 2;
+                    double half_pipeWidth = m.getPipeWidth(pickPipe).AsDouble() / 2;
                     XYZ widthOffset = half_pipeWidth * wallDir;
                     XYZ holeLocation = GetHoleLocation(linkedWall, pickPipe, linkTransform);
                     if (holeLocation == null)
@@ -323,66 +324,66 @@ namespace CEC_WallCast
             return point_Center;
 
         }
-        public Parameter getPipeWidth(Element element)
-        {
-            Parameter targetPara = null;
-            //Pipe >用外徑計算
-            if (element.get_Parameter(BuiltInParameter.RBS_PIPE_OUTER_DIAMETER) != null)
-            {
-                targetPara = element.get_Parameter(BuiltInParameter.RBS_PIPE_OUTER_DIAMETER);
-            }
-            //Conduit
-            else if (element.get_Parameter(BuiltInParameter.RBS_CONDUIT_DIAMETER_PARAM) != null)
-            {
-                targetPara = element.get_Parameter(BuiltInParameter.RBS_CONDUIT_DIAMETER_PARAM);
-            }
-            //Duct
-            else if (element.get_Parameter(BuiltInParameter.RBS_CURVE_DIAMETER_PARAM) != null)
-            {
-                targetPara = element.get_Parameter(BuiltInParameter.RBS_CURVE_DIAMETER_PARAM);
-            }
-            //方型Duct
-            else if (element.get_Parameter(BuiltInParameter.RBS_CURVE_WIDTH_PARAM) != null)
-            {
-                targetPara = element.get_Parameter(BuiltInParameter.RBS_CURVE_WIDTH_PARAM);
-            }
-            //電纜架
-            else if (element.get_Parameter(BuiltInParameter.RBS_CABLETRAY_WIDTH_PARAM) != null)
-            {
-                targetPara = element.get_Parameter(BuiltInParameter.RBS_CABLETRAY_WIDTH_PARAM);
-            }
-            return targetPara;
-        }
-        public Parameter getPipeHeight(Element element)
-        {
-            Parameter targetPara = null;
-            //Pipe
-            if (element.get_Parameter(BuiltInParameter.RBS_PIPE_OUTER_DIAMETER) != null)
-            {
-                targetPara = element.get_Parameter(BuiltInParameter.RBS_PIPE_OUTER_DIAMETER);
-            }
-            //Conduit
-            else if (element.get_Parameter(BuiltInParameter.RBS_CONDUIT_DIAMETER_PARAM) != null)
-            {
-                targetPara = element.get_Parameter(BuiltInParameter.RBS_CONDUIT_DIAMETER_PARAM);
-            }
-            //Duct
-            else if (element.get_Parameter(BuiltInParameter.RBS_CURVE_DIAMETER_PARAM) != null)
-            {
-                targetPara = element.get_Parameter(BuiltInParameter.RBS_CURVE_DIAMETER_PARAM);
-            }
-            //方型Duct
-            else if (element.get_Parameter(BuiltInParameter.RBS_CURVE_HEIGHT_PARAM) != null)
-            {
-                targetPara = element.get_Parameter(BuiltInParameter.RBS_CURVE_HEIGHT_PARAM);
-            }
-            //電纜架
-            else if (element.get_Parameter(BuiltInParameter.RBS_CABLETRAY_HEIGHT_PARAM) != null)
-            {
-                targetPara = element.get_Parameter(BuiltInParameter.RBS_CABLETRAY_HEIGHT_PARAM);
-            }
-            return targetPara;
-        }
+        //public Parameter getPipeWidth(Element element)
+        //{
+        //    Parameter targetPara = null;
+        //    //Pipe >用外徑計算
+        //    if (element.get_Parameter(BuiltInParameter.RBS_PIPE_OUTER_DIAMETER) != null)
+        //    {
+        //        targetPara = element.get_Parameter(BuiltInParameter.RBS_PIPE_OUTER_DIAMETER);
+        //    }
+        //    //Conduit
+        //    else if (element.get_Parameter(BuiltInParameter.RBS_CONDUIT_DIAMETER_PARAM) != null)
+        //    {
+        //        targetPara = element.get_Parameter(BuiltInParameter.RBS_CONDUIT_DIAMETER_PARAM);
+        //    }
+        //    //Duct
+        //    else if (element.get_Parameter(BuiltInParameter.RBS_CURVE_DIAMETER_PARAM) != null)
+        //    {
+        //        targetPara = element.get_Parameter(BuiltInParameter.RBS_CURVE_DIAMETER_PARAM);
+        //    }
+        //    //方型Duct
+        //    else if (element.get_Parameter(BuiltInParameter.RBS_CURVE_WIDTH_PARAM) != null)
+        //    {
+        //        targetPara = element.get_Parameter(BuiltInParameter.RBS_CURVE_WIDTH_PARAM);
+        //    }
+        //    //電纜架
+        //    else if (element.get_Parameter(BuiltInParameter.RBS_CABLETRAY_WIDTH_PARAM) != null)
+        //    {
+        //        targetPara = element.get_Parameter(BuiltInParameter.RBS_CABLETRAY_WIDTH_PARAM);
+        //    }
+        //    return targetPara;
+        //}
+        //public Parameter getPipeHeight(Element element)
+        //{
+        //    Parameter targetPara = null;
+        //    //Pipe
+        //    if (element.get_Parameter(BuiltInParameter.RBS_PIPE_OUTER_DIAMETER) != null)
+        //    {
+        //        targetPara = element.get_Parameter(BuiltInParameter.RBS_PIPE_OUTER_DIAMETER);
+        //    }
+        //    //Conduit
+        //    else if (element.get_Parameter(BuiltInParameter.RBS_CONDUIT_DIAMETER_PARAM) != null)
+        //    {
+        //        targetPara = element.get_Parameter(BuiltInParameter.RBS_CONDUIT_DIAMETER_PARAM);
+        //    }
+        //    //Duct
+        //    else if (element.get_Parameter(BuiltInParameter.RBS_CURVE_DIAMETER_PARAM) != null)
+        //    {
+        //        targetPara = element.get_Parameter(BuiltInParameter.RBS_CURVE_DIAMETER_PARAM);
+        //    }
+        //    //方型Duct
+        //    else if (element.get_Parameter(BuiltInParameter.RBS_CURVE_HEIGHT_PARAM) != null)
+        //    {
+        //        targetPara = element.get_Parameter(BuiltInParameter.RBS_CURVE_HEIGHT_PARAM);
+        //    }
+        //    //電纜架
+        //    else if (element.get_Parameter(BuiltInParameter.RBS_CABLETRAY_HEIGHT_PARAM) != null)
+        //    {
+        //        targetPara = element.get_Parameter(BuiltInParameter.RBS_CABLETRAY_HEIGHT_PARAM);
+        //    }
+        //    return targetPara;
+        //}
     }
     //因為多管共管的功能有會涉及到不同外參的管，所以過濾器要另外處理
     public class linkedPipeSelectionFilter : ISelectionFilter

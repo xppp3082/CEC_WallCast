@@ -20,11 +20,11 @@ namespace CEC_WallCast
 #if RELEASE2019
         public static DisplayUnitType unitType = DisplayUnitType.DUT_MILLIMETERS;
 #else
-        public  ForgeTypeId unitType = UnitTypeId.Millimeters;
+        public ForgeTypeId unitType = UnitTypeId.Millimeters;
 #endif
-        public  string errorOutput;
-        public  List<Transform> usefulLinkTrans = new List<Transform>();
-        public   bool checkPara(Element elem, string paraName)
+        public string errorOutput;
+        public List<Transform> usefulLinkTrans = new List<Transform>();
+        public bool checkPara(Element elem, string paraName)
         {
             bool result = false;
             foreach (Parameter parameter in elem.Parameters)
@@ -37,7 +37,7 @@ namespace CEC_WallCast
             }
             return result;
         }
-        public   IList<Solid> GetTargetSolids(Element element)
+        public IList<Solid> GetTargetSolids(Element element)
         {
             List<Solid> solids = new List<Solid>();
             Options options = new Options();
@@ -75,7 +75,7 @@ namespace CEC_WallCast
             }
             return solids;
         }
-        public  Solid singleSolidFromElement(Element inputElement)
+        public Solid singleSolidFromElement(Element inputElement)
         {
             Document doc = inputElement.Document;
             Autodesk.Revit.ApplicationServices.Application app = doc.Application;
@@ -106,7 +106,7 @@ namespace CEC_WallCast
             }
             return solidResult;
         }
-        public  Solid singleSolidFromWall(Element element)
+        public Solid singleSolidFromWall(Element element)
         {
             Options options = new Options();
             GeometryElement geomElem = element.get_Geometry(options);
@@ -117,7 +117,7 @@ namespace CEC_WallCast
             }
             return solidResult;
         }
-        public  double calculateSolidVol(Element inst, Element linkedWall, Transform toTrans)
+        public double calculateSolidVol(Element inst, Element linkedWall, Transform toTrans)
         {
             //計算套管與牆之間的交集量體，並回傳其體積大小
             double vol = 0.0;
@@ -131,9 +131,18 @@ namespace CEC_WallCast
             }
             return vol;
         }
-        public List<FamilyInstance> findTargetElements(Document doc)
+        public List<FamilyInstance> findTargetElements(Document doc, string type)
         {
-            string internalName = "CEC-穿牆";
+            string internalName = "";
+            if (type == "穿牆")
+            {
+                internalName = "CEC-穿牆";
+            }
+            else if (type == "穿版")
+            {
+                internalName = "CEC-穿版";
+            }
+
             List<FamilyInstance> castInstances = new List<FamilyInstance>();
             try
             {
@@ -167,9 +176,17 @@ namespace CEC_WallCast
             }
             return castInstances;
         }
-        public  List<FamilyInstance> findTargetElementsPart(Document doc)
+        public List<FamilyInstance> findTargetElementsPart(Document doc, string type)
         {
-            string internalName = "CEC-穿牆";
+            string internalName = "";
+            if (type == "穿牆")
+            {
+                internalName = "CEC-穿牆";
+            }
+            else if (type == "穿版")
+            {
+                internalName = "CEC-穿版";
+            }
             List<FamilyInstance> castInstances = new List<FamilyInstance>();
             try
             {
@@ -202,13 +219,57 @@ namespace CEC_WallCast
             }
             return castInstances;
         }
-        public  double sortLevelbyHeight(Element element)
+        public List<FamilyInstance> findTargetElementsByLevels(Document doc, Level le,string type)
+        {
+            string internalName = "";
+            if (type == "穿牆")
+            {
+                internalName = "CEC-穿牆";
+            }
+            else if (type == "穿版")
+            {
+                internalName = "CEC-穿版";
+            }
+            List<FamilyInstance> castInstances = new List<FamilyInstance>();
+            try
+            {
+                FilteredElementCollector coll = new FilteredElementCollector(doc);
+                ElementCategoryFilter castCate_Filter = new ElementCategoryFilter(BuiltInCategory.OST_PipeAccessory);
+                ElementClassFilter castInst_Filter = new ElementClassFilter(typeof(Instance));
+                LogicalAndFilter andFilter = new LogicalAndFilter(castCate_Filter, castInst_Filter);
+                ElementLevelFilter levelFilter = new ElementLevelFilter(le.Id);
+                coll.WherePasses(andFilter).WherePasses(levelFilter).WhereElementIsNotElementType().ToElements(); //找出模型中實做的穿牆套管
+                if (coll != null)
+                {
+                    foreach (FamilyInstance e in coll)
+                    {
+                        Parameter p = e.Symbol.LookupParameter("API識別名稱");
+                        if (p != null && p.AsString().Contains(internalName))
+                        {
+                            castInstances.Add(e);
+                        }
+                    }
+                }
+                else if (castInstances.Count() == 0)
+                {
+                    {
+                        MessageBox.Show("尚未匯入套管元件，或模型中沒有實做的套管元件");
+                    }
+                }
+            }
+            catch
+            {
+                MessageBox.Show("蒐集套管發生問題!");
+            }
+            return castInstances;
+        }
+        public double sortLevelbyHeight(Element element)
         {
             Level tempLevel = element as Level;
             double levelHeight = element.LookupParameter("立面").AsDouble();
             return levelHeight;
         }
-        public  Element updateCastWithOutWall(Element elem)
+        public Element updateCastWithOutWall(Element elem)
         {
             FamilyInstance updateCast = null;
             try
@@ -287,11 +348,11 @@ namespace CEC_WallCast
             }
             catch
             {
-                errorOutput+=$"更新套管資訊失敗，ID為 {elem.Id} 的套管無法更新資訊!\n";
+                errorOutput += $"更新套管資訊失敗，ID為 {elem.Id} 的套管無法更新資訊!\n";
             }
             return updateCast;
         }
-        public  Element updateCastWithWall(Element elem, Element linkedWall)
+        public Element updateCastWithWall(Element elem, Element linkedWall)
         {
             FamilyInstance updateCast = null;
             try
@@ -386,9 +447,18 @@ namespace CEC_WallCast
             }
             return updateCast;
         }
-        public   List<RevitLinkInstance> findWallLinkInstance(Document doc)
+        public List<RevitLinkInstance> findLinkInstance(Document doc, string type)
         {
             //找到擁有牆元件的外參
+            BuiltInCategory builtinCate = BuiltInCategory.OST_Walls;
+            if (type == "穿牆")
+            {
+                builtinCate = BuiltInCategory.OST_Walls;
+            }
+            else if (type == "穿版")
+            {
+                builtinCate = BuiltInCategory.OST_Floors;
+            }
             List<RevitLinkInstance> linkInstanceList = new List<RevitLinkInstance>();
             FilteredElementCollector linkCollector = new FilteredElementCollector(doc).OfClass(typeof(RevitLinkInstance));
             foreach (RevitLinkInstance linkInst in linkCollector)
@@ -396,41 +466,102 @@ namespace CEC_WallCast
                 Document linkDoc = linkInst.GetLinkDocument();
                 if (linkDoc != null)
                 {
-                    FilteredElementCollector coll = new FilteredElementCollector(linkDoc).OfCategory(BuiltInCategory.OST_Walls).WhereElementIsNotElementType();
+                    FilteredElementCollector coll = new FilteredElementCollector(linkDoc).OfCategory(builtinCate).WhereElementIsNotElementType();
                     if (coll.Count() > 0) linkInstanceList.Add(linkInst);
                 }
             }
             return linkInstanceList;
         }
-        public  FilteredElementCollector getAllLinkedWall(Document linkedDoc)
+        public Dictionary<Transform, List<FamilyInstance>> getLinkedCastDict(Document doc, string type)
         {
-            FilteredElementCollector beamCollector = new FilteredElementCollector(linkedDoc).OfClass(typeof(Wall));
-            beamCollector.WhereElementIsNotElementType();
-            return beamCollector;
+            string internalName = "";
+            if (type == "穿牆")
+            {
+                internalName = "CEC-穿牆";
+            }
+            else if (type == "穿版")
+            {
+                internalName = "CEC-穿版";
+            }
+            Dictionary<Transform, List<FamilyInstance>> linkCastBeamDict = new Dictionary<Transform, List<FamilyInstance>>();
+            List<RevitLinkInstance> linkedMEP_files = getMEPLinkInstance(doc);
+            //ElementLevelFilter levelFilter = new ElementLevelFilter(level.Id);
+            //針對所有在此檔案中的機電外參檔找尋套管
+            foreach (RevitLinkInstance linkInst in linkedMEP_files)
+            {
+                List<FamilyInstance> targetList = new List<FamilyInstance>();
+                Transform linkTrans = linkInst.GetTotalTransform();
+                Document linkDoc = linkInst.GetLinkDocument();
+                FilteredElementCollector linkCastCollector = new FilteredElementCollector(linkDoc).OfCategory(BuiltInCategory.OST_PipeAccessory).OfClass(typeof(Instance));
+                foreach (FamilyInstance inst in linkCastCollector)
+                {
+                    //針對checkName一定要確認是否為null，因為有些元件沒有此參數
+                    Parameter checkName = inst.Symbol.LookupParameter("API識別名稱");
+                    if (checkName != null && checkName.AsString().Contains(internalName))
+                    {
+                        targetList.Add(inst);
+                    }
+                }
+                //MessageBox.Show($"外參檔名：{linkDoc.Title}的檔案中有{targetList.Count.ToString()}個套管");
+                //如果有蒐集到套管
+                if (targetList.Count() > 0)
+                {
+                    if (!linkCastBeamDict.Keys.Contains(linkTrans))
+                    {
+                        linkCastBeamDict.Add(linkTrans, targetList);
+                    }
+                    else if (linkCastBeamDict.Keys.Contains(linkTrans))
+                    {
+                        //continue;
+                        foreach (FamilyInstance inst in targetList)
+                        {
+                            linkCastBeamDict[linkTrans].Add(inst);
+                        }
+                    }
+                }
+            }
+            return linkCastBeamDict;
         }
-        public  Dictionary<ElementId, List<Element>> getCastWallDict(Document doc)
+        public FilteredElementCollector getAllLinkedWall(Document linkedDoc, string type)
+        {
+            FilteredElementCollector linkedElementCollector = null;
+            if (type == "穿牆")
+            {
+                linkedElementCollector = new FilteredElementCollector(linkedDoc).OfClass(typeof(Wall));
+            }
+            else if (type == "穿版")
+            {
+                linkedElementCollector = new FilteredElementCollector(linkedDoc).OfClass(typeof(Floor));
+            }
+            //FilteredElementCollector beamCollector = new FilteredElementCollector(linkedDoc).OfClass(typeof(Wall));
+            //beamCollector.WhereElementIsNotElementType();
+            linkedElementCollector.WhereElementIsNotElementType();
+            return linkedElementCollector;
+        }
+        public Dictionary<ElementId, List<Element>> getCastDict(Document doc, string type)
         {
             //蒐集套管與牆的關係
             Dictionary<ElementId, List<Element>> castWallDict = new Dictionary<ElementId, List<Element>>();
             try
             {
                 //蒐集檔案中實做的牆套管
-                List<FamilyInstance> familyInstances = findTargetElements(doc);
-                List<RevitLinkInstance> linkWallInstances = findWallLinkInstance(doc);
+
+                List<FamilyInstance> familyInstances = findTargetElements(doc, type);
+                List<RevitLinkInstance> linkInstances = findLinkInstance(doc, type);
                 Transform totalTransform = null;
                 Transform inverseTransform = null;
-                if (linkWallInstances.Count != 0)
+                if (linkInstances.Count != 0)
                 {
                     foreach (FamilyInstance inst in familyInstances)
                     {
-                        foreach (RevitLinkInstance linkInst in linkWallInstances)
+                        foreach (RevitLinkInstance linkInst in linkInstances)
                         {
                             //dictionary中尚未包含這個套管的ID則進行計算
                             //if (!castWallDict.Keys.Contains(inst.Id))
                             //{
                             totalTransform = linkInst.GetTotalTransform();
                             inverseTransform = totalTransform.Inverse;
-                            FilteredElementCollector collectorWall = getAllLinkedWall(linkInst.GetLinkDocument());
+                            FilteredElementCollector collectorWall = getAllLinkedWall(linkInst.GetLinkDocument(), type);
                             Solid castSolid = singleSolidFromElement(inst);
                             if (castSolid == null) continue;
 
@@ -472,6 +603,57 @@ namespace CEC_WallCast
             }
             return castWallDict;
         }
+        public Dictionary<Transform, List<FamilyInstance>> getLinkedCastDictByLevel(Document doc, Level localLevel,string type)
+        {
+            string internalName = "";
+            if (type == "穿牆")
+            {
+                internalName = "CEC-穿牆";
+            }
+            else if (type == "穿版")
+            {
+                internalName = "CEC-穿版";
+            }
+            Dictionary<Transform, List<FamilyInstance>> linkCastBeamDict = new Dictionary<Transform, List<FamilyInstance>>();
+            List<RevitLinkInstance> linkedMEP_files = getMEPLinkInstance(doc);
+            //針對所有在此檔案中的機電外參檔找尋套管
+            foreach (RevitLinkInstance linkInst in linkedMEP_files)
+            {
+                List<FamilyInstance> targetList = new List<FamilyInstance>();
+                Transform linkTrans = linkInst.GetTotalTransform();
+                Document linkDoc = linkInst.GetLinkDocument();
+                Level linkedLevel = getTargetLevelfromLink(linkInst, localLevel);
+                ElementLevelFilter levelFilter = new ElementLevelFilter(linkedLevel.Id);
+                FilteredElementCollector linkCastCollector = new FilteredElementCollector(linkDoc).OfCategory(BuiltInCategory.OST_PipeAccessory).OfClass(typeof(Instance)).WherePasses(levelFilter);
+                foreach (FamilyInstance inst in linkCastCollector)
+                {
+                    //針對checkName一定要確認是否為null，因為有些元件沒有此參數
+                    Parameter checkName = inst.Symbol.LookupParameter("API識別名稱");
+                    if (checkName != null && checkName.AsString().Contains(internalName))
+                    {
+                        targetList.Add(inst);
+                    }
+                }
+                //MessageBox.Show($"外參檔名：{linkDoc.Title}的檔案中有{targetList.Count.ToString()}個套管");
+                //如果有蒐集到套管
+                if (targetList.Count() > 0)
+                {
+                    if (!linkCastBeamDict.Keys.Contains(linkTrans))
+                    {
+                        linkCastBeamDict.Add(linkTrans, targetList);
+                    }
+                    else if (linkCastBeamDict.Keys.Contains(linkTrans))
+                    {
+                        //continue;
+                        foreach (FamilyInstance inst in targetList)
+                        {
+                            linkCastBeamDict[linkTrans].Add(inst);
+                        }
+                    }
+                }
+            }
+            return linkCastBeamDict;
+        }
         public List<RevitLinkInstance> getMEPLinkInstance(Document doc)
         {
             List<RevitLinkInstance> linkInstanceList = new List<RevitLinkInstance>();
@@ -502,7 +684,7 @@ namespace CEC_WallCast
             }
             return linkInstanceList;
         }
-        public  Element updateCastContent(Document doc, Element elem)
+        public Element updateCastContent(Document doc, Element elem)
         {
             FamilyInstance updateCast = null;
             try
@@ -676,7 +858,7 @@ namespace CEC_WallCast
             }
             return updateCast;
         }
-        public  Element modifyCastLen(Element elem, Element linkedWall, Transform toTrans)
+        public Element modifyCastLenWithWall(Element elem, Element linkedWall, Transform toTrans)
         {
             FamilyInstance updateCast = null;
             try
@@ -715,7 +897,7 @@ namespace CEC_WallCast
                 if (!castPt.IsAlmostEqualTo(targetPoint) && elem.Pinned == false)
                 {
                     ElementTransformUtils.MoveElement(document, inst.Id, positionChange);
-                    //再調整長度
+                    //再調整長度ㄠ
                     if (instLenPara.AsDouble() <= wall.Width)
                     {
                         instLenPara.Set(castLength_toSet);
@@ -729,7 +911,7 @@ namespace CEC_WallCast
             }
             return updateCast;
         }
-        public  XYZ TransformPoint(XYZ point, Transform transform)
+        public XYZ TransformPoint(XYZ point, Transform transform)
         {
             double x = point.X;
             double y = point.Y;
@@ -748,6 +930,257 @@ namespace CEC_WallCast
             double zTemp = x * b0.Z + y * b1.Z + z * b2.Z + origin.Z;
 
             return new XYZ(xTemp, yTemp, zTemp);
+        }
+        public Parameter getPipeWidth(Element element)
+        {
+            Parameter targetPara = null;
+            //Pipe >用外徑計算
+            if (element.get_Parameter(BuiltInParameter.RBS_PIPE_OUTER_DIAMETER) != null)
+            {
+                targetPara = element.get_Parameter(BuiltInParameter.RBS_PIPE_OUTER_DIAMETER);
+            }
+            //Conduit
+            else if (element.get_Parameter(BuiltInParameter.RBS_CONDUIT_DIAMETER_PARAM) != null)
+            {
+                targetPara = element.get_Parameter(BuiltInParameter.RBS_CONDUIT_DIAMETER_PARAM);
+            }
+            //Duct
+            else if (element.get_Parameter(BuiltInParameter.RBS_CURVE_DIAMETER_PARAM) != null)
+            {
+                targetPara = element.get_Parameter(BuiltInParameter.RBS_CURVE_DIAMETER_PARAM);
+            }
+            //方型Duct
+            else if (element.get_Parameter(BuiltInParameter.RBS_CURVE_WIDTH_PARAM) != null)
+            {
+                targetPara = element.get_Parameter(BuiltInParameter.RBS_CURVE_WIDTH_PARAM);
+            }
+            //電纜架
+            else if (element.get_Parameter(BuiltInParameter.RBS_CABLETRAY_WIDTH_PARAM) != null)
+            {
+                targetPara = element.get_Parameter(BuiltInParameter.RBS_CABLETRAY_WIDTH_PARAM);
+            }
+            return targetPara;
+        }
+        public Parameter getPipeHeight(Element element)
+        {
+            Parameter targetPara = null;
+            //Pipe
+            if (element.get_Parameter(BuiltInParameter.RBS_PIPE_OUTER_DIAMETER) != null)
+            {
+                targetPara = element.get_Parameter(BuiltInParameter.RBS_PIPE_OUTER_DIAMETER);
+            }
+            //Conduit
+            else if (element.get_Parameter(BuiltInParameter.RBS_CONDUIT_DIAMETER_PARAM) != null)
+            {
+                targetPara = element.get_Parameter(BuiltInParameter.RBS_CONDUIT_DIAMETER_PARAM);
+            }
+            //Duct
+            else if (element.get_Parameter(BuiltInParameter.RBS_CURVE_DIAMETER_PARAM) != null)
+            {
+                targetPara = element.get_Parameter(BuiltInParameter.RBS_CURVE_DIAMETER_PARAM);
+            }
+            //方型Duct
+            else if (element.get_Parameter(BuiltInParameter.RBS_CURVE_HEIGHT_PARAM) != null)
+            {
+                targetPara = element.get_Parameter(BuiltInParameter.RBS_CURVE_HEIGHT_PARAM);
+            }
+            //電纜架
+            else if (element.get_Parameter(BuiltInParameter.RBS_CABLETRAY_HEIGHT_PARAM) != null)
+            {
+                targetPara = element.get_Parameter(BuiltInParameter.RBS_CABLETRAY_HEIGHT_PARAM);
+            }
+            return targetPara;
+        }
+        public XYZ GetHoleLocation(Element wallElem, Element pipeElem, Transform trans)
+        {
+
+            //取得牆的solid
+            Solid solid_wall = singleSolidFromElement(wallElem);
+            solid_wall = SolidUtils.CreateTransformed(solid_wall, trans);
+            //取得管的curve
+            LocationCurve pipe_locationcurve = pipeElem.Location as LocationCurve;
+            Curve pipe_Line = pipe_locationcurve.Curve;
+            //取得管與牆相交的curve
+            SolidCurveIntersectionOptions intersectOptions = new SolidCurveIntersectionOptions();
+            SolidCurveIntersection intersection = solid_wall.IntersectWithCurve(pipe_Line, intersectOptions);
+            XYZ point_Center = null;
+            if (intersection.SegmentCount > 0)
+            {
+                Curve curveInside = intersection.GetCurveSegment(0);
+                //取得curve中點
+                XYZ point_Start = curveInside.GetEndPoint(0);
+                XYZ point_End = curveInside.GetEndPoint(1);
+                XYZ tempCenter = curveInside.Evaluate(0.5, true);
+                //point_Center = new XYZ((point_Start.X + point_End.X) / 2, (point_Start.Y + point_End.Y) / 2, ((point_Start.Z + point_End.Z) / 2));
+                point_Center = tempCenter;
+
+            }
+            return point_Center;
+
+        }
+        public IList<Level> findAllLevel(Document doc)
+        {
+            IList<Element> targetList = null;
+            List<Level> sortList = new List<Level>();
+            FilteredElementCollector levelCollector = new FilteredElementCollector(doc);
+            ElementFilter level_Filter = new ElementCategoryFilter(BuiltInCategory.OST_Levels);
+            levelCollector.OfClass(typeof(Level)).WherePasses(level_Filter).WhereElementIsNotElementType();
+            targetList = levelCollector.ToElements();
+            //targetList = levelCollector.ToElements();
+            foreach (Level level in targetList)
+            {
+                sortList.Add(level);
+            }
+            sortList.OrderBy(x => x.Elevation);
+            return sortList;
+        }
+        public bool InstanceExist(Document document, XYZ point,string type)
+        {
+            string internalName = "";
+            if (type == "穿牆")
+            {
+                internalName = "CEC-穿牆";
+            }
+            else if (type == "穿版")
+            {
+                internalName = "CEC-穿版";
+            }
+            FilteredElementCollector filteredElementCollector = new FilteredElementCollector(document).OfClass(typeof(FamilyInstance)).OfCategory(BuiltInCategory.OST_PipeAccessory);
+            List<FamilyInstance> targetList = new List<FamilyInstance>();
+            foreach (FamilyInstance inst in filteredElementCollector)
+            {
+                Parameter p = inst.Symbol.LookupParameter("API識別名稱");
+                if (p != null && p.AsString().Contains(internalName))
+                {
+                    targetList.Add(inst);
+                }
+            }
+            //foreach (Instance instance in filteredElementCollector)
+            foreach (FamilyInstance instance in targetList)
+            {
+                Element element = instance as Element;
+                Location loc = instance.Location;
+                LocationPoint locpoint = loc as LocationPoint;
+                if (locpoint.Point.IsAlmostEqualTo(point, 0.001))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+        public bool InstanceExistByLevel(Document document, XYZ point, Level localLevel,string type)
+        {
+            string internalName = "";
+            if (type == "穿牆")
+            {
+                internalName = "CEC-穿牆";
+            }
+            else if (type == "穿版")
+            {
+                internalName = "CEC-穿版";
+            }
+            ElementLevelFilter levelFilter = new ElementLevelFilter(localLevel.Id);
+            FilteredElementCollector filteredElementCollector = new FilteredElementCollector(document).OfClass(typeof(FamilyInstance)).OfCategory(BuiltInCategory.OST_PipeAccessory).WherePasses(levelFilter);
+            List<FamilyInstance> targetList = new List<FamilyInstance>();
+            foreach (FamilyInstance inst in filteredElementCollector)
+            {
+                Parameter p = inst.Symbol.LookupParameter("API識別名稱");
+                if (p != null && p.AsString().Contains(type))
+                {
+                    targetList.Add(inst);
+                }
+            }
+            //foreach (Instance instance in filteredElementCollector)
+            foreach (FamilyInstance instance in targetList)
+            {
+                Element element = instance as Element;
+                Location loc = instance.Location;
+                LocationPoint locpoint = loc as LocationPoint;
+                if (locpoint.Point.IsAlmostEqualTo(point, 0.001))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+        public bool InstanceExistinLinkByLevel(Document document, FamilyInstance cast, Level localLevel,string type)
+        {
+            //用既有的套管和外參中的套管檢查，如果名稱(Symbol)一樣，位置也一樣，則刪除
+            //蒐集本機端的套管資訊
+            string castSymbolName = cast.Symbol.Name;
+            LocationPoint castLocate = cast.Location as LocationPoint;
+            XYZ castPt = castLocate.Point;
+
+            Dictionary<Transform, List<FamilyInstance>> linkCastDict = getLinkedCastDictByLevel(document, localLevel,type);
+            List<XYZ> linkCastLocateList = new List<XYZ>();
+            foreach (Transform trans in linkCastDict.Keys)
+            {
+                List<FamilyInstance> instListLinked = linkCastDict[trans];
+                foreach (FamilyInstance inst in instListLinked)
+                {
+                    LocationPoint instLocate = inst.Location as LocationPoint;
+                    XYZ instPt = instLocate.Point;
+                    instPt = TransformPoint(instPt, trans);
+                    linkCastLocateList.Add(instPt);
+                    string instSymbolName = inst.Symbol.Name;
+                    if (instPt.IsAlmostEqualTo(castPt) && castSymbolName == instSymbolName)
+                    {
+                        //true 表示在外參中有，但在實體檔中也有
+                        return true;
+                    }
+                }
+            }
+            //false 表示在外參中沒有，但在實體檔中有，需要被刪掉
+            return false;
+        }
+        public bool InstanceExistinLink(Document document, FamilyInstance cast, string type)
+        {
+            //用既有的套管和外參中的套管檢查，如果名稱(Symbol)一樣，位置也一樣，則刪除
+            //蒐集本機端的套管資訊
+            string castSymbolName = cast.Symbol.Name;
+            LocationPoint castLocate = cast.Location as LocationPoint;
+            XYZ castPt = castLocate.Point;
+
+            Dictionary<Transform, List<FamilyInstance>> linkCastDict = getLinkedCastDict(document, type);
+            List<XYZ> linkCastLocateList = new List<XYZ>();
+            foreach (Transform trans in linkCastDict.Keys)
+            {
+                List<FamilyInstance> instListLinked = linkCastDict[trans];
+                foreach (FamilyInstance inst in instListLinked)
+                {
+                    LocationPoint instLocate = inst.Location as LocationPoint;
+                    XYZ instPt = instLocate.Point;
+                    instPt = TransformPoint(instPt, trans);
+                    linkCastLocateList.Add(instPt);
+                    string instSymbolName = inst.Symbol.Name;
+                    if (instPt.IsAlmostEqualTo(castPt) && castSymbolName == instSymbolName)
+                    {
+                        //true 表示在外參中有，但在實體檔中也有
+                        return true;
+                    }
+                }
+            }
+            //false 表示在外參中沒有，但在實體檔中有，需要被刪掉
+            return false;
+        }
+        public Level getTargetLevelfromLink(RevitLinkInstance linkInst, Level localLevel)
+        {
+            Level targetLevel = null;
+            Document linkDoc = linkInst.GetLinkDocument();
+            FilteredElementCollector levelCollector = new FilteredElementCollector(linkDoc).OfClass(typeof(Level));
+
+            foreach (Element e in levelCollector)
+            {
+                Element localElement = localLevel as Element;
+                Level tempLevel = e as Level;
+                if (e.Name == localLevel.Name || tempLevel.ProjectElevation == localLevel.ProjectElevation)
+                {
+                    targetLevel = tempLevel;
+                    break;
+                }
+            }
+            if (targetLevel == null) MessageBox.Show("請確認外參模型與本機端模型的高程與命名原則是否一致");
+            return targetLevel;
         }
     }
 }
