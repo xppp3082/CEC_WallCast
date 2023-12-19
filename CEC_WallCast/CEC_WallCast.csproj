@@ -99,16 +99,21 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="App.cs" />
+    <Compile Include="CopyAllSlabCast.cs" />
     <Compile Include="CopyAllWallCast.cs" />
+    <Compile Include="CopyPartSlabCast.cs" />
     <Compile Include="CopyPartWallCast.cs" />
     <Compile Include="CreateBoxRectLink.cs" />
+    <Compile Include="CreateRectSlabCast.cs" />
     <Compile Include="CreateRectWallCast.cs" />
     <Compile Include="CreateRectWallCastLink.cs" />
+    <Compile Include="CreateSlabCast.cs" />
     <Compile Include="CreateWallCast.cs" />
     <Compile Include="CreateWallCastLink.cs" />
     <Compile Include="CreateWallCastV2.cs" />
     <Compile Include="ExcelLog.cs" />
     <Compile Include="method.cs" />
+    <Compile Include="MultiSlabRectCast.cs" />
     <Compile Include="MultiWallRectCast.cs" />
     <Compile Include="MultiWallRectCastLink.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
@@ -118,6 +123,8 @@
       <DependentUpon>Resources.resx</DependentUpon>
     </Compile>
     <Compile Include="ReUpdateWallCastNumber.cs" />
+    <Compile Include="SlabCastUpdate.cs" />
+    <Compile Include="SlabCastUpdatePart.cs" />
     <Compile Include="UpdateWallCastNumber.cs" />
     <Compile Include="WallCastProgressUI.xaml.cs">
       <DependentUpon>WallCastProgressUI.xaml</DependentUpon>
