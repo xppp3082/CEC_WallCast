@@ -12,10 +12,11 @@ using Autodesk.Revit.DB.Structure;
 using System.Windows.Forms;
 #endregion
 
+
 namespace CEC_WallCast
 {
     [Autodesk.Revit.Attributes.Transaction(Autodesk.Revit.Attributes.TransactionMode.Manual)]
-    class ReUpdateWallCastNumber : IExternalCommand
+    class ReUpdateSlabCastNumber : IExternalCommand
     {
         public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elements)
         {
@@ -23,11 +24,11 @@ namespace CEC_WallCast
             Autodesk.Revit.ApplicationServices.Application app = uiapp.Application;
             UIDocument uidoc = commandData.Application.ActiveUIDocument;
             Document doc = uidoc.Document;
-            IList<Element> levelList = findAllLevel(doc);
             int totalCount = 0;
             Level tempLevel;
             Counter.count += 1;
-            //DisplayUnitType unitType = DisplayUnitType.DUT_MILLIMETERS;
+            method m = new method();
+            string keyName = "CEC-穿版";
             try
             {
                 DialogResult dialogResult = MessageBox.Show("確定要將穿牆套管「全部重新編號」?", "CEC-MEP", MessageBoxButtons.YesNo);
@@ -47,7 +48,7 @@ namespace CEC_WallCast
                         //{
                         tempLevel = viewPlan.GenLevel as Level;
                         int num = 1;
-                        List<FamilyInstance> castList = findCastByLevel(tempLevel).OrderBy(x => getCastPt(x).X).ThenBy(x => getCastPt(x).Y).ToList();
+                        List<FamilyInstance> castList = m.findCastByLevel(tempLevel,keyName).OrderBy(x => m.getCastPt(x).X).ThenBy(x => m.getCastPt(x).Y).ToList();
                         List<FamilyInstance> noNumList = new List<FamilyInstance>();
                         List<FamilyInstance> modifyList = new List<FamilyInstance>();
                         //if (castList.Count == 0) continue;
@@ -91,51 +92,6 @@ namespace CEC_WallCast
                 return Result.Failed;
             }
             return Result.Succeeded;
-        }
-        public IList<Element> findAllLevel(Document doc)
-        {
-            IList<Element> targetList = null;
-            FilteredElementCollector levelCollector = new FilteredElementCollector(doc);
-            ElementFilter level_Filter = new ElementCategoryFilter(BuiltInCategory.OST_Levels);
-            levelCollector.OfClass(typeof(Level)).WherePasses(level_Filter).WhereElementIsNotElementType();
-            targetList = levelCollector.ToElements();
-            return targetList;
-        }
-        public List<FamilyInstance> findCastByLevel(Level level)
-        {
-            List<FamilyInstance> targetList = new List<FamilyInstance>();
-            ElementLevelFilter levelFilter = new ElementLevelFilter(level.Id);
-            FilteredElementCollector castCollector = new FilteredElementCollector(level.Document).OfCategory(BuiltInCategory.OST_PipeAccessory).OfClass(typeof(FamilyInstance)).WherePasses(levelFilter).WhereElementIsNotElementType();
-            foreach (FamilyInstance inst in castCollector)
-            {
-                //針對checkName一定要確認是否為null，因為有些元件沒有此參數
-                Parameter checkName = inst.Symbol.LookupParameter("API識別名稱");
-                if (checkName != null && checkName.AsString().Contains("CEC-穿牆"))
-                {
-                    targetList.Add(inst);
-                }
-            }
-            return targetList;
-        }
-        public XYZ getCastPt(FamilyInstance inst)
-        {
-            XYZ result = null;
-            LocationPoint castLocate = inst.Location as LocationPoint;
-            result = castLocate.Point;
-            return result;
-        }
-        public bool checkPara(Element elem, string paraName)
-        {
-            bool result = false;
-            foreach (Parameter parameter in elem.Parameters)
-            {
-                Parameter val = parameter;
-                if (val.Definition.Name == paraName)
-                {
-                    result = true;
-                }
-            }
-            return result;
         }
     }
 }

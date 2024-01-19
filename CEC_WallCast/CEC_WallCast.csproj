@@ -116,15 +116,18 @@
     <Compile Include="MultiSlabRectCast.cs" />
     <Compile Include="MultiWallRectCast.cs" />
     <Compile Include="MultiWallRectCastLink.cs" />
+    <Compile Include="NumberRuleSet.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Properties\Resources.Designer.cs">
       <AutoGen>True</AutoGen>
       <DesignTime>True</DesignTime>
       <DependentUpon>Resources.resx</DependentUpon>
     </Compile>
+    <Compile Include="ReUpdateSlabCastNumber.cs" />
     <Compile Include="ReUpdateWallCastNumber.cs" />
     <Compile Include="SlabCastUpdate.cs" />
     <Compile Include="SlabCastUpdatePart.cs" />
+    <Compile Include="UpdateSlabCastNumber.cs" />
     <Compile Include="UpdateWallCastNumber.cs" />
     <Compile Include="WallCastProgressUI.xaml.cs">
       <DependentUpon>WallCastProgressUI.xaml</DependentUpon>

@@ -684,6 +684,29 @@ namespace CEC_WallCast
             }
             return linkInstanceList;
         }
+        public List<FamilyInstance> findCastByLevel(Level level,string keyName)
+        {
+            List<FamilyInstance> targetList = new List<FamilyInstance>();
+            ElementLevelFilter levelFilter = new ElementLevelFilter(level.Id);
+            FilteredElementCollector castCollector = new FilteredElementCollector(level.Document).OfCategory(BuiltInCategory.OST_PipeAccessory).OfClass(typeof(FamilyInstance)).WherePasses(levelFilter).WhereElementIsNotElementType();
+            foreach (FamilyInstance inst in castCollector)
+            {
+                //針對checkName一定要確認是否為null，因為有些元件沒有此參數
+                Parameter checkName = inst.Symbol.LookupParameter("API識別名稱");
+                if (checkName != null && checkName.AsString().Contains(keyName))
+                {
+                    targetList.Add(inst);
+                }
+            }
+            return targetList;
+        }
+        public XYZ getCastPt(FamilyInstance inst)
+        {
+            XYZ result = null;
+            LocationPoint castLocate = inst.Location as LocationPoint;
+            result = castLocate.Point;
+            return result;
+        }
         public Element updateCastContent(Document doc, Element elem)
         {
             FamilyInstance updateCast = null;

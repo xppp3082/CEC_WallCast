@@ -12,10 +12,11 @@ using Autodesk.Revit.DB.Structure;
 using System.Windows.Forms;
 #endregion
 
+
 namespace CEC_WallCast
 {
     [Autodesk.Revit.Attributes.Transaction(Autodesk.Revit.Attributes.TransactionMode.Manual)]
-    class UpdateWallCastNumber : IExternalCommand
+    class UpdateSlabCastNumber : IExternalCommand
     {
         public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elements)
         {
@@ -23,23 +24,16 @@ namespace CEC_WallCast
             Autodesk.Revit.ApplicationServices.Application app = uiapp.Application;
             UIDocument uidoc = commandData.Application.ActiveUIDocument;
             Document doc = uidoc.Document;
-            //IList<Element> levelList = findAllLevel(doc);
             int totalCount = 0;
             Level tempLevel;
             Counter.count += 1;
             method m = new method();
-            string keyName = "CEC-穿牆";
+            string keyName = "CEC-穿版";
             try
             {
-                #region 邏輯解釋
-                //1.針對所有的穿樑套管編號
-                //2.找到不在正常編號或是重複編號的套管，其餘的則放入既有套管編號(正常編號不需在編)
-                //3.將原本不正常編號，或是多編的套管數字補上 (補位邏輯)
-                #endregion
-
                 using (Transaction trans = new Transaction(doc))
                 {
-                    trans.Start("穿牆套管自動編號");
+                    trans.Start("穿版開口自動編號");
                     ViewPlan viewPlan = doc.ActiveView as ViewPlan;
                     if (viewPlan == null)
                     {
@@ -49,7 +43,7 @@ namespace CEC_WallCast
                     //foreach (Element e in levelList)
                     //{
                     tempLevel = viewPlan.GenLevel as Level;
-                    List<FamilyInstance> castList = m.findCastByLevel(tempLevel,keyName).OrderBy(x => m.getCastPt(x).X).ThenBy(x => m.getCastPt(x).Y).ToList();
+                    List<FamilyInstance> castList = m.findCastByLevel(tempLevel, keyName).OrderBy(x => m.getCastPt(x).X).ThenBy(x => m.getCastPt(x).Y).ToList();
                     List<FamilyInstance> modifyList = new List<FamilyInstance>(); //編號需要修改的套管，沒有編號或編號錯誤的傢伙
                     List<string> toWrite = new List<string>(); //蒐集需要寫入的編號
                     List<string> numList = new List<string>();
@@ -110,7 +104,7 @@ namespace CEC_WallCast
                     }
                     trans.Commit();
                 }
-                MessageBox.Show($"「{tempLevel.Name}」中的穿牆套管編號完畢!");
+                MessageBox.Show($"「{tempLevel.Name}」中的穿版開口編號完畢!");
             }
             catch
             {
@@ -119,15 +113,5 @@ namespace CEC_WallCast
             }
             return Result.Succeeded;
         }
-        public IList<Element> findAllLevel(Document doc)
-        {
-            IList<Element> targetList = null;
-            FilteredElementCollector levelCollector = new FilteredElementCollector(doc);
-            ElementFilter level_Filter = new ElementCategoryFilter(BuiltInCategory.OST_Levels);
-            levelCollector.OfClass(typeof(Level)).WherePasses(level_Filter).WhereElementIsNotElementType();
-            targetList = levelCollector.ToElements();
-            return targetList;
-        }
     }
 }
-

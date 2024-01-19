@@ -68,54 +68,72 @@ namespace CEC_WallCast
             int columNum = year - startYear + ad;
             bool fileExist = false;
             bool sheetExist = false;
-            try
+            if (Directory.Exists(filepath))
             {
-                if (excelApp != null)
+                try
                 {
-                    if (File.Exists(finalPath))
+                    if (excelApp != null)
                     {
+                        if (File.Exists(finalPath))
+                        {
 
-                        fileExist = true;
-                        //打開既有的檔案，判斷工作簿是否存在
-                        excelWorkbook = excelApp.Workbooks.Open(finalPath);
-                        foreach (Excel.Worksheet sheet in excelWorkbook.Worksheets)
-                        {
-                            if (sheet.Name == ribbonName)
+                            fileExist = true;
+                            //打開既有的檔案，判斷工作簿是否存在
+                            excelWorkbook = excelApp.Workbooks.Open(finalPath);
+                            foreach (Excel.Worksheet sheet in excelWorkbook.Worksheets)
                             {
-                                sheetExist = true;
-                                excelWorksheet = sheet;
+                                if (sheet.Name == ribbonName)
+                                {
+                                    sheetExist = true;
+                                    excelWorksheet = sheet;
+                                }
                             }
-                        }
-                        //if (sheet.Name == year.ToString())
-                        //如果Excelsheet已存在
-                        if (sheetExist == true)
-                        {
-                            //把資料寫進相對的workbook
-                            excelWorksheet.Cells[1, columNum] = year.ToString() + "年";
-                            //必須針對這個判斷時否有值
-                            var cell = excelWorksheet.Cells[month, columNum] as Excel.Range;
-                            var cellValue = 0;
-                            if (cell.Value == null)
+                            //if (sheet.Name == year.ToString())
+                            //如果Excelsheet已存在
+                            if (sheetExist == true)
                             {
-                                cellValue = 0;
+                                //把資料寫進相對的workbook
+                                excelWorksheet.Cells[1, columNum] = year.ToString() + "年";
+                                //必須針對這個判斷時否有值
+                                var cell = excelWorksheet.Cells[month, columNum] as Excel.Range;
+                                var cellValue = 0;
+                                if (cell.Value == null)
+                                {
+                                    cellValue = 0;
+                                }
+                                else
+                                {
+                                    cellValue = (int)(excelWorksheet.Cells[month, columNum] as Excel.Range).Value;
+                                }
+                                excelWorksheet.Cells[month, columNum] = cellValue + _userCount;
                             }
                             else
                             {
-                                cellValue = (int)(excelWorksheet.Cells[month, columNum] as Excel.Range).Value;
+                                //excelWorksheet = new Excel.Worksheet();
+                                //excelWorkbook.Worksheets.Add();
+                                //int worksheetsNum = excelWorkbook.Worksheets.Count;
+                                //excelWorksheet = excelWorkbook.Worksheets[1];
+                                excelWorksheet = excelWorkbook.Worksheets.Add();
+                                excelWorksheet.Name = ribbonName;
+                                //excelWorksheet.Name = year.ToString();
+                                //建立一個新的以年份為基礎的workbook
+                                //把資料寫進相對的sheet
+                                for (int i = 1; i <= 12; i++)
+                                {
+                                    excelWorksheet.Cells[i + 1, 1] = $"{i}月";
+                                }
+                                excelWorksheet.Cells[1, columNum] = year.ToString() + "年";
+                                excelWorksheet.Cells[month, columNum] = _userCount;
                             }
-                            excelWorksheet.Cells[month, columNum] = cellValue + _userCount;
                         }
                         else
                         {
-                            //excelWorksheet = new Excel.Worksheet();
-                            //excelWorkbook.Worksheets.Add();
-                            //int worksheetsNum = excelWorkbook.Worksheets.Count;
-                            //excelWorksheet = excelWorkbook.Worksheets[1];
-                            excelWorksheet = excelWorkbook.Worksheets.Add();
+                            //如果檔案不存在則自己做新的
+                            fileExist = false;
+                            excelWorkbook = excelApp.Workbooks.Add();
+                            excelWorksheet = new Excel.Worksheet();
+                            excelWorksheet = excelWorkbook.Worksheets[1];
                             excelWorksheet.Name = ribbonName;
-                            //excelWorksheet.Name = year.ToString();
-                            //建立一個新的以年份為基礎的workbook
-                            //把資料寫進相對的sheet
                             for (int i = 1; i <= 12; i++)
                             {
                                 excelWorksheet.Cells[i + 1, 1] = $"{i}月";
@@ -123,46 +141,31 @@ namespace CEC_WallCast
                             excelWorksheet.Cells[1, columNum] = year.ToString() + "年";
                             excelWorksheet.Cells[month, columNum] = _userCount;
                         }
-                    }
-                    else
-                    {
-                        //如果檔案不存在則自己做新的
-                        fileExist = false;
-                        excelWorkbook = excelApp.Workbooks.Add();
-                        excelWorksheet = new Excel.Worksheet();
-                        excelWorksheet = excelWorkbook.Worksheets[1];
-                        excelWorksheet.Name = ribbonName;
-                        for (int i = 1; i <= 12; i++)
+                        if (!fileExist)
                         {
-                            excelWorksheet.Cells[i + 1, 1] = $"{i}月";
+                            excelApp.ActiveWorkbook.SaveAs(finalPath, Excel.XlSaveAsAccessMode.xlNoChange);
                         }
-                        excelWorksheet.Cells[1, columNum] = year.ToString() + "年";
-                        excelWorksheet.Cells[month, columNum] = _userCount;
+                        else
+                        {
+                            excelApp.ActiveWorkbook.Save();
+                        }
                     }
-                    if (!fileExist)
-                    {
-                        excelApp.ActiveWorkbook.SaveAs(finalPath, Excel.XlSaveAsAccessMode.xlNoChange);
-                    }
-                    else
-                    {
-                        excelApp.ActiveWorkbook.Save();
-                    }
+                    excelWorksheet = null;
+                    excelWorkbook.Close();
+                    excelWorkbook = null;
+                    excelApp.Quit();
+                    excelApp = null;
                 }
-                excelWorksheet = null;
-                excelWorkbook.Close();
-                excelWorkbook = null;
-                excelApp.Quit();
-                excelApp = null;
-            }
-            catch
-            {
-                //關閉及釋放物件
-                excelWorksheet = null;
-                excelWorkbook.Close();
-                excelWorkbook = null;
-                excelApp.Quit();
-                excelApp = null;
-                MessageBox.Show($"{ribbons.wallCast}_log 儲存失敗");
+                catch
+                {
+                    //關閉及釋放物件
+                    excelWorksheet = null;
+                    excelWorkbook.Close();
+                    excelWorkbook = null;
+                    excelApp.Quit();
+                    excelApp = null;
+                    MessageBox.Show($"{ribbons.wallCast}_log 儲存失敗");
+                }
             }
         }
     }
